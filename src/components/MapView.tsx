@@ -133,7 +133,7 @@ export default function MapView({ markers, className = "", height = "h-80" }: Ma
 
       {/* Scale indicator */}
       <div className="absolute bottom-3 right-3 bg-white/80 rounded-lg px-2 py-1 text-[9px] text-[#5a7190] border border-gray-100">
-        Bangladesh · RescueNet
+        Bangladesh · ResQHub
       </div>
     </div>
   );

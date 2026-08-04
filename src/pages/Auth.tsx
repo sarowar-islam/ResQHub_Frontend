@@ -110,7 +110,7 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      toast.success("Account verified! Welcome to RescueNet.");
+      toast.success("Account verified! Welcome to ResQHub.");
       onNavigate(role);
     }, 1000);
   };
@@ -127,20 +127,20 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
       <div className="hidden lg:flex w-1/2 flex-col justify-between p-10" style={{ background: "#1e3a5f" }}>
         <div>
           <button onClick={() => onNavigate("landing")} className="flex items-center gap-2 text-blue-300 hover:text-white text-sm transition-colors mb-10">
-            <ArrowLeft className="w-4 h-4" /> Back to RescueNet
+            <ArrowLeft className="w-4 h-4" /> Back to ResQHub
           </button>
           <div className="flex items-center gap-3 mb-10">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>RescueNet</span>
+            <span className="text-xl font-bold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>ResQHub</span>
           </div>
           <h1 className="text-4xl font-extrabold text-white leading-tight mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Emergency help<br />
             <span style={{ color: "#0d9488" }}>starts here.</span>
           </h1>
           <p className="text-blue-200 text-sm leading-relaxed max-w-xs">
-            Join 12,000+ volunteers and 89 NGOs already coordinating disaster relief across Bangladesh.
+            Join 12,000+ volunteers and 89 NGOs already coordinating support through ResQHub.
           </p>
         </div>
 
@@ -245,8 +245,8 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
               </h2>
               <p className="text-sm text-gray-500 mb-6">
                 {mode === "login"
-                  ? "Sign in to access your RescueNet portal."
-                  : "Join RescueNet and start making a difference today."}
+                  ? "Sign in to access your ResQHub portal."
+                  : "Join ResQHub and start making a difference today."}
               </p>
 
               {/* Role selector (signup only) */}
@@ -388,7 +388,7 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
                 >
                   {loading
                     ? <span className="animate-spin rounded-full border-2 border-white border-t-transparent w-4 h-4" />
-                    : mode === "login" ? "Sign In to RescueNet" : "Create Account"
+                    : mode === "login" ? "Sign In to ResQHub" : "Create Account"
                   }
                 </button>
               </form>

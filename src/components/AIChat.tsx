@@ -47,7 +47,7 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
     {
       id: "init",
       role: "assistant",
-      content: "Hello! I'm RescueNet AI, your emergency response assistant. I can help you summarize field reports, prioritize requests, find shelters, and generate relief summaries. How can I assist?",
+      content: "Hello! I'm ResQHub AI, your coordination assistant. I can help you summarize field reports, prioritize requests, find shelters, and generate relief summaries. How can I assist?",
       timestamp: new Date(),
     },
   ]);
@@ -91,7 +91,7 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
             <Bot className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-white">RescueNet AI</p>
+            <p className="text-sm font-bold text-white">ResQHub AI</p>
             <p className="text-[10px] text-blue-200">Emergency Response Assistant</p>
           </div>
           <div className="flex items-center gap-1.5 mr-2">

@@ -230,8 +230,8 @@ export const HELP_REQUESTS: HelpRequest[] = [
     updatedAt: "2024-06-15T10:45:00Z",
     assignedVolunteer: "vol-001",
     timeline: [
-      { status: "pending", timestamp: "2024-06-15T09:15:00Z", note: "Request submitted via RescueNet", actor: "System" },
-      { status: "accepted", timestamp: "2024-06-15T09:45:00Z", note: "Request accepted and verified", actor: "RescueNet Admin" },
+      { status: "pending", timestamp: "2024-06-15T09:15:00Z", note: "Request submitted via ResQHub", actor: "System" },
+      { status: "accepted", timestamp: "2024-06-15T09:45:00Z", note: "Request accepted and verified", actor: "ResQHub Admin" },
       { status: "assigned", timestamp: "2024-06-15T10:45:00Z", note: "Volunteer Karim Ahmed assigned with rescue boat", actor: "BRAC Coordinator" },
     ],
   },
@@ -625,7 +625,7 @@ export const TESTIMONIALS: Testimonial[] = [
     role: "Flood Survivor",
     location: "Sylhet",
     initials: "JB",
-    quote: "RescueNet reached us within 2 hours of our request. The volunteers were incredible. I cannot imagine surviving that flood without their help.",
+    quote: "ResQHub reached us within 2 hours of our request. The volunteers were incredible. I cannot imagine surviving that flood without their help.",
     rating: 5,
   },
   {
@@ -643,7 +643,7 @@ export const TESTIMONIALS: Testimonial[] = [
     role: "Program Director, BRAC",
     location: "Dhaka",
     initials: "TJ",
-    quote: "RescueNet has transformed how we coordinate relief operations. The inventory and volunteer management features alone save us countless hours each day.",
+    quote: "ResQHub has transformed how we coordinate relief operations. The inventory and volunteer management features alone save us countless hours each day.",
     rating: 5,
   },
 ];
@@ -748,5 +748,5 @@ export const AI_RESPONSES: Record<string, string> = {
   "summarize": "**Field Report Summary — Sylhet Flood (June 15, 2024)**\n\nTotal active requests: 312 (47 critical, 128 high priority). Primary needs: rescue (34%), food (28%), medicine (18%). Avg response time: 2.4 hours. Volunteer deployment: 87% capacity. Recommendation: Deploy 3 additional boat-rescue teams to Sunamganj sector immediately.",
   "prioritize": "**Priority Queue (Top 5 Requests)**\n\n1. 🔴 REQ-001 — Family of 6 trapped, Sylhet (rescue + infant)\n2. 🔴 REQ-003 — Diabetic patient, insulin critical, Dhaka\n3. 🔴 REQ-006 — Pregnant woman, 8 months, Keraniganj\n4. 🟠 REQ-002 — 8 people without food 2 days, Sylhet\n5. 🟠 REQ-005 — 12 families no clean water, Cox's Bazar",
   "shelter": "**Nearest Available Shelters**\n\n1. **Sylhet Govt. College** — 1.2 km away, 77 spots remaining, medical support available ✓\n2. **RC Relief Center Dhaka** — 4.8 km, 188 spots, full facilities ✓\n3. **Friendship Char Shelter** — 67 km, 113 spots, medical support ✓\n\nRecommendation: Sylhet Govt. College for flood-affected families with medical needs.",
-  "generate": "**Relief Operation Summary — June 15, 2024**\n\nRescueNet has facilitated 312 active relief operations across 8 districts. 234 volunteers deployed. 48,250 individuals reached. Inventory status: adequate for food, critical for water and first aid. NGO coordination: 6 active organizations. Next 24-hour priority: water purification for Sylhet and Cox's Bazar sectors.",
+  "generate": "**Relief Operation Summary — June 15, 2024**\n\nResQHub has facilitated 312 active relief operations across 8 districts. 234 volunteers deployed. 48,250 individuals reached. Inventory status: adequate for food, critical for water and first aid. NGO coordination: 6 active organizations. Next 24-hour priority: water purification for Sylhet and Cox's Bazar sectors.",
 };

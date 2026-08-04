@@ -431,7 +431,7 @@ function Announcements() {
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("all");
   const [announcements, setAnnouncements] = useState([
-    { id: "1", title: "System Maintenance — June 20", body: "RescueNet will undergo scheduled maintenance on June 20 from 2:00–4:00 AM. All services will be temporarily unavailable.", audience: "all", date: "2024-06-15", pinned: true },
+    { id: "1", title: "System Maintenance — June 20", body: "ResQHub will undergo scheduled maintenance on June 20 from 2:00–4:00 AM. All services will be temporarily unavailable.", audience: "all", date: "2024-06-15", pinned: true },
     { id: "2", title: "New Cyclone Shelter Protocol", body: "Updated evacuation and shelter assignment protocols for cyclone response have been published. All NGOs and volunteers must review.", audience: "ngo,volunteer", date: "2024-06-14", pinned: false },
   ]);
 

@@ -62,7 +62,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
             <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "#1e3a5f" }}>
               <Shield className="w-4 h-4 text-white" />
             </div>
-            <span className="text-lg font-bold text-[#0f1b2d]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>RescueNet</span>
+            <span className="text-lg font-bold text-[#0f1b2d]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>ResQHub</span>
           </div>
 
           <div className="hidden lg:flex items-center gap-6 ml-6">
@@ -128,14 +128,18 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
                 <span className="text-xs font-medium text-emerald-300">{STATS.activeRequests} active emergencies being handled</span>
               </div>
 
+              <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 rounded-full px-3.5 py-1.5 mb-5 text-sm font-medium text-teal-200">
+                <span className="w-2 h-2 rounded-full bg-teal-400" />
+                A Volunteer Coordination Platform
+              </div>
+
               <h1 className="text-4xl lg:text-6xl font-extrabold text-white leading-tight mb-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Connecting Help<br />
-                <span style={{ color: "#0d9488" }}>When It Matters</span><br />
-                Most.
+                Coordinate help.<br />
+                <span style={{ color: "#0d9488" }}>Deliver support faster</span>
               </h1>
 
               <p className="text-lg text-gray-300 leading-relaxed mb-8 max-w-lg">
-                RescueNet unites disaster victims, volunteers, and NGOs on a single platform — from the moment disaster strikes to the final mile of relief delivery.
+                ResQHub brings people in need, volunteers, and partner organizations together on one trusted platform — from the first request to the final delivery of support.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3">
@@ -468,7 +472,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
       <section className="py-14" style={{ background: "#0d9488" }}>
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-extrabold text-white mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Be the difference in someone's survival.</h2>
-          <p className="text-teal-100 mb-7 text-sm">Join 12,000+ volunteers and 89 NGOs already making an impact on RescueNet.</p>
+          <p className="text-teal-100 mb-7 text-sm">Join 12,000+ volunteers and 89 NGOs already using ResQHub to coordinate fast, dependable response.</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button onClick={() => onNavigate("victim")} className="px-7 py-3.5 bg-white text-[#0d9488] font-bold rounded-xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
               <LifeBuoy className="w-4 h-4" /> I Need Help
@@ -489,9 +493,9 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
                 <div className="w-7 h-7 rounded-xl bg-white/10 flex items-center justify-center">
                   <Shield className="w-3.5 h-3.5 text-white" />
                 </div>
-                <span className="text-base font-bold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>RescueNet</span>
+                <span className="text-base font-bold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>ResQHub</span>
               </div>
-              <p className="text-xs text-gray-400 leading-relaxed">Bangladesh's emergency response coordination platform, connecting lives to lifelines since 2023.</p>
+              <p className="text-xs text-gray-400 leading-relaxed">A modern volunteer coordination platform that helps communities connect support, volunteers, and relief resources in real time.</p>
             </div>
             <div>
               <p className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Platform</p>
@@ -512,14 +516,14 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
             <div>
               <p className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3">Contact</p>
               <div className="space-y-2 text-xs text-gray-500">
-                <p>emergency@rescuenet.bd</p>
+                <p>hello@resqhub.org</p>
                 <p>+880-2-12345678</p>
                 <p>Dhaka, Bangladesh</p>
               </div>
             </div>
           </div>
           <div className="border-t border-white/8 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-[11px] text-gray-500">© 2024 RescueNet Bangladesh. All rights reserved.</p>
+            <p className="text-[11px] text-gray-500">© 2024 ResQHub. All rights reserved.</p>
             <div className="flex gap-4">
               {["Privacy Policy", "Terms of Service", "Contact"].map(l => (
                 <span key={l} className="text-[11px] text-gray-500 hover:text-gray-300 cursor-pointer">{l}</span>

@@ -79,8 +79,8 @@ export default function PortalLayout({
             <Shield className="w-4.5 h-4.5 text-white" />
           </div>
           <div>
-            <p className="text-base font-bold text-white leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>RescueNet</p>
-            <p className="text-[10px] text-blue-300 mt-0.5">{portalLabel}</p>
+            <p className="text-base font-bold text-white leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>ResQHub</p>
+            <p className="text-[10px] text-blue-300 mt-0.5">Volunteer coordination platform</p>
           </div>
           <button className="ml-auto lg:hidden text-white/50 hover:text-white" onClick={() => setSidebarOpen(false)}>
             <X className="w-4 h-4" />

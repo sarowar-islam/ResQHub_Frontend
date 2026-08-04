@@ -1,4 +1,4 @@
-Create a complete modern UI/UX design for a responsive multi-page disaster management web application called "ReliefLink".
+Create a complete modern UI/UX design for a responsive multi-page disaster management web application called "ResQHub".
 
 The application is designed specifically for disaster response during floods, cyclones, landslides and similar emergencies in Bangladesh.
 
@@ -53,9 +53,9 @@ Use skeleton loaders wherever appropriate.
 
 Support Light Mode.
 
------------------------------------
-APPLICATION STRUCTURE
------------------------------------
+---
+
+## APPLICATION STRUCTURE
 
 The application contains four major sections.
 
@@ -69,9 +69,9 @@ The application contains four major sections.
 
 5. Admin Dashboard
 
------------------------------------
-PUBLIC WEBSITE
------------------------------------
+---
+
+## PUBLIC WEBSITE
 
 Landing Page
 
@@ -119,9 +119,9 @@ Latest disaster news
 
 Footer
 
------------------------------------
-AUTHENTICATION
------------------------------------
+---
+
+## AUTHENTICATION
 
 Beautiful authentication pages
 
@@ -149,9 +149,9 @@ Validation messages
 
 Password strength indicator
 
------------------------------------
-VICTIM PORTAL
------------------------------------
+---
+
+## VICTIM PORTAL
 
 Dashboard
 
@@ -255,9 +255,9 @@ Medical conditions
 
 Settings
 
------------------------------------
-VOLUNTEER PORTAL
------------------------------------
+---
+
+## VOLUNTEER PORTAL
 
 Dashboard
 
@@ -335,9 +335,9 @@ Languages
 
 Availability schedule
 
------------------------------------
-NGO PORTAL
------------------------------------
+---
+
+## NGO PORTAL
 
 Dashboard
 
@@ -417,9 +417,9 @@ Documents
 
 Contact information
 
------------------------------------
-ADMIN DASHBOARD
------------------------------------
+---
+
+## ADMIN DASHBOARD
 
 Overview
 
@@ -449,9 +449,9 @@ Manage users
 
 Announcements
 
------------------------------------
-COMMON FEATURES
------------------------------------
+---
+
+## COMMON FEATURES
 
 Global Search
 
@@ -481,9 +481,9 @@ Responsive sidebar
 
 Responsive navbar
 
------------------------------------
-MAP COMPONENTS
------------------------------------
+---
+
+## MAP COMPONENTS
 
 Interactive map using placeholder map.
 
@@ -505,9 +505,9 @@ Information card
 
 Route preview placeholder
 
------------------------------------
-AI FEATURES
------------------------------------
+---
+
+## AI FEATURES
 
 Include UI only.
 
@@ -529,9 +529,9 @@ Generate relief summary
 
 Display AI responses using realistic mock data.
 
------------------------------------
-NOTIFICATIONS
------------------------------------
+---
+
+## NOTIFICATIONS
 
 Toast notifications
 
@@ -547,9 +547,9 @@ Mission completed
 
 Shelter updates
 
------------------------------------
-DESIGN SYSTEM
------------------------------------
+---
+
+## DESIGN SYSTEM
 
 Create reusable design components.
 
@@ -591,9 +591,9 @@ Charts
 
 Reusable page layouts
 
------------------------------------
-RESPONSIVENESS
------------------------------------
+---
+
+## RESPONSIVENESS
 
 Desktop first.
 
@@ -611,9 +611,9 @@ Responsive tables.
 
 Responsive forms.
 
------------------------------------
-CODE STRUCTURE
------------------------------------
+---
+
+## CODE STRUCTURE
 
 Generate frontend only.
 

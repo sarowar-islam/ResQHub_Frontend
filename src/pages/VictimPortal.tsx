@@ -60,7 +60,7 @@ function VictimDashboard({ onNavigate }: { onNavigate: (p: VictimPage) => void }
       <div className="bg-[#1e3a5f] rounded-2xl p-6 text-white">
         <p className="text-sm text-blue-200 mb-1">Good afternoon,</p>
         <h2 className="text-xl font-bold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Mohammad Rafiqul Islam</h2>
-        <p className="text-xs text-blue-300">Stay safe. RescueNet is monitoring 3 active emergencies in your area.</p>
+        <p className="text-xs text-blue-300">Stay safe. ResQHub is monitoring 3 active emergencies in your area.</p>
         <div className="mt-4 flex gap-2">
           <button
             onClick={() => onNavigate("request-help")}
