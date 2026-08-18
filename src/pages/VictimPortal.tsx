@@ -16,6 +16,16 @@ import { MAP_MARKERS } from "../data/mockData";
 
 type VictimPage = "dashboard" | "request-help" | "track-requests" | "shelters" | "profile";
 
+type RescuePoll = {
+  id: string;
+  victimName: string;
+  location: string;
+  note: string;
+  reporter: string;
+  time: string;
+  votes: { true: number; false: number };
+};
+
 const NAV_ITEMS = [
   { id: "dashboard",       label: "Dashboard",      icon: LayoutDashboard },
   { id: "request-help",    label: "Request Help",   icon: LifeBuoy },
@@ -53,7 +63,17 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_CONFIG }) {
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
-function VictimDashboard({ onNavigate }: { onNavigate: (p: VictimPage) => void }) {
+function VictimDashboard({
+  onNavigate,
+  rescuePolls,
+  onVoteRescue,
+  userVotes,
+}: {
+  onNavigate: (p: VictimPage) => void;
+  rescuePolls: RescuePoll[];
+  onVoteRescue: (pollId: string, vote: boolean) => void;
+  userVotes: Record<string, boolean>;
+}) {
   return (
     <div className="space-y-6">
       {/* Welcome */}
@@ -92,6 +112,51 @@ function VictimDashboard({ onNavigate }: { onNavigate: (p: VictimPage) => void }
           </div>
         </div>
       </div>
+
+      {/* Rescue verification poll */}
+      {rescuePolls.length > 0 && (
+        <div className="bg-white border border-yellow-200 rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-[#0f1b2d]">Rescue verification polls</h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full">Pending</span>
+          </div>
+          <div className="space-y-3">
+            {rescuePolls.map(poll => {
+              const currentVote = userVotes[poll.id];
+
+              return (
+                <div key={poll.id} className="border border-yellow-100 bg-yellow-50 rounded-xl p-3">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-xs font-bold text-[#0f1b2d]">{poll.victimName}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{poll.location}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-500">{poll.time}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3 leading-relaxed">{poll.note}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => onVoteRescue(poll.id, true)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors ${currentVote === true ? "bg-green-700 text-white ring-2 ring-green-200" : "bg-green-600 text-white hover:bg-green-700"}`}
+                      >
+                        True ({poll.votes.true})
+                      </button>
+                      <button
+                        onClick={() => onVoteRescue(poll.id, false)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors ${currentVote === false ? "bg-red-700 text-white ring-2 ring-red-200" : "bg-red-500 text-white hover:bg-red-600"}`}
+                      >
+                        False ({poll.votes.false})
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-gray-500">{currentVote === undefined ? "No vote cast" : `Your vote: ${currentVote ? "True" : "False"}`}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick actions */}
       <div>
@@ -192,12 +257,19 @@ function VictimDashboard({ onNavigate }: { onNavigate: (p: VictimPage) => void }
 }
 
 // ─── Request Help ─────────────────────────────────────────────────────────────
-function RequestHelp() {
+function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePoll) => void }) {
   const [type, setType] = useState("");
   const [priority, setPriority] = useState("");
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [mode, setMode] = useState<"self" | "relay">("self");
+  const [rescueName, setRescueName] = useState("Amena Begum");
+  const [rescueLocation, setRescueLocation] = useState("Bashundhara, Dhaka");
+  const [rescueNote, setRescueNote] = useState("");
+  const [emergencyContacts, setEmergencyContacts] = useState<string[]>(["+880 1812345678", "+880 1912345678"]);
+  const [newContact, setNewContact] = useState("");
+  const [mapSelectedLocation, setMapSelectedLocation] = useState("Sylhet Sadar, Ward 5");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,8 +277,51 @@ function RequestHelp() {
       toast.error("Please fill in all required fields.");
       return;
     }
+
+    if (mode === "relay") {
+      if (!rescueName || !rescueLocation || !rescueNote) {
+        toast.error("Please provide the missing person details and rescue location.");
+        return;
+      }
+
+      const poll: RescuePoll = {
+        id: `rescue-${Date.now()}`,
+        victimName: rescueName,
+        location: rescueLocation,
+        note: rescueNote,
+        reporter: "Relative / Witness",
+        time: "Just now",
+        votes: { true: 2, false: 0 },
+      };
+
+      onBroadcastRescue(poll);
+      toast.success("Rescue request broadcasted. Volunteers and family members can confirm if the situation is real.");
+      setMode("self");
+      setRescueName("");
+      setRescueLocation("");
+      setRescueNote("");
+    } else {
+      toast.success("Your help request has been submitted. We'll connect you with a volunteer shortly.");
+    }
+
     setSubmitted(true);
-    toast.success("Your help request has been submitted. We'll connect you with a volunteer shortly.");
+  };
+
+  const addEmergencyContact = () => {
+    if (!newContact.trim()) {
+      toast.error("Enter a phone number first.");
+      return;
+    }
+    if (emergencyContacts.length >= 5) {
+      toast.error("You can add up to 5 emergency contact numbers.");
+      return;
+    }
+    setEmergencyContacts(prev => [...prev, newContact.trim()]);
+    setNewContact("");
+  };
+
+  const removeEmergencyContact = (phone: string) => {
+    setEmergencyContacts(prev => prev.filter(contact => contact !== phone));
   };
 
   if (submitted) {
@@ -320,18 +435,122 @@ function RequestHelp() {
           </div>
         </div>
 
+        {/* Rescue / witness mode */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <label className="block text-sm font-bold text-[#0f1b2d] mb-3">Request Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {[{ id: "self", label: "My own rescue" }, { id: "relay", label: "Report someone else" }].map(option => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setMode(option.id as "self" | "relay")}
+                className={`py-2.5 rounded-xl text-xs font-semibold transition-colors ${mode === option.id ? "bg-[#1e3a5f] text-white" : "bg-gray-50 text-gray-600 border border-gray-200"}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          {mode === "relay" && (
+            <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Missing / stranded person's name</label>
+                <input
+                  value={rescueName}
+                  onChange={e => setRescueName(e.target.value)}
+                  placeholder="Rafiq Islam"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Location to rescue</label>
+                <input
+                  value={rescueLocation}
+                  onChange={e => setRescueLocation(e.target.value)}
+                  placeholder="Bashundhara, Dhaka"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10"
+                />
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-[#0f1b2d]">Pick location from map</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chosen = mapSelectedLocation || "Sylhet Sadar, Ward 5";
+                      setRescueLocation(chosen);
+                      toast.success(`Rescue location set to ${chosen}.`);
+                    }}
+                    className="text-[10px] font-semibold text-[#1e3a5f] hover:underline"
+                  >
+                    Use selected map point
+                  </button>
+                </div>
+                <div className="rounded-xl overflow-hidden border border-gray-200">
+                  <MapView
+                    markers={MAP_MARKERS.slice(0, 4)}
+                    height="h-40"
+                    onSelectLocation={(location) => {
+                      setMapSelectedLocation(location);
+                      setRescueLocation(location);
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-gray-500">
+                  <span>Selected point</span>
+                  <span className="font-medium text-[#0f1b2d]">{mapSelectedLocation}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">What happened?</label>
+                <textarea
+                  value={rescueNote}
+                  onChange={e => setRescueNote(e.target.value)}
+                  rows={3}
+                  placeholder="We lost contact with the victim near the flood embankment. They may be trapped and unable to call for help."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Emergency contact */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <label className="block text-sm font-bold text-[#0f1b2d] mb-2">Emergency Contact Number</label>
-          <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 focus-within:border-[#1e3a5f] focus-within:ring-2 focus-within:ring-[#1e3a5f]/10 transition-all">
-            <Phone className="w-4 h-4 text-gray-400" />
+          <label className="block text-sm font-bold text-[#0f1b2d] mb-2">Emergency Contact Numbers</label>
+          <div className="space-y-2 mb-3">
+            {emergencyContacts.map((phone, index) => (
+              <div key={`${phone}-${index}`} className="flex items-center gap-3 border border-gray-200 rounded-xl px-3 py-2.5">
+                <Phone className="w-4 h-4 text-gray-400" />
+                <span className="flex-1 text-sm text-[#0f1b2d]">{phone}</span>
+                <button
+                  type="button"
+                  onClick={() => removeEmergencyContact(phone)}
+                  className="text-red-500 hover:text-red-700 text-xs font-semibold"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
             <input
               type="tel"
-              value={contact}
-              onChange={e => setContact(e.target.value)}
-              placeholder="+880 1XXXXXXXXX"
-              className="flex-1 text-sm bg-transparent border-none outline-none"
+              value={newContact}
+              onChange={e => setNewContact(e.target.value)}
+              placeholder="Add up to 5 contacts"
+              className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10"
             />
+            <button
+              type="button"
+              onClick={addEmergencyContact}
+              className="px-4 py-2.5 rounded-xl bg-[#1e3a5f] text-white text-xs font-semibold hover:opacity-90"
+            >
+              Add
+            </button>
           </div>
         </div>
 
@@ -341,7 +560,7 @@ function RequestHelp() {
           style={{ background: "#dc2626" }}
         >
           <LifeBuoy className="w-4 h-4" />
-          Submit Emergency Request
+          {mode === "relay" ? "Broadcast Rescue Request" : "Submit Emergency Request"}
         </button>
       </form>
     </div>
@@ -571,7 +790,7 @@ function SheltersPage() {
 }
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
-function VictimProfile() {
+function VictimProfile({ emergencyContacts }: { emergencyContacts: string[] }) {
   const [editing, setEditing] = useState(false);
 
   return (
@@ -642,20 +861,21 @@ function VictimProfile() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Emergency Contacts</h3>
         <div className="space-y-2">
-          {[
-            { name: "Amena Begum (Wife)", phone: "+880 1812345678" },
-            { name: "Karim Mia (Brother)", phone: "+880 1912345678" },
-          ].map(c => (
-            <div key={c.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-              <div>
-                <p className="text-xs font-semibold text-[#0f1b2d]">{c.name}</p>
-                <p className="text-[10px] text-gray-500">{c.phone}</p>
+          {emergencyContacts.length === 0 ? (
+            <p className="text-xs text-gray-500">No emergency contacts added yet.</p>
+          ) : (
+            emergencyContacts.map((phone, index) => (
+              <div key={`${phone}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="text-xs font-semibold text-[#0f1b2d]">Contact {index + 1}</p>
+                  <p className="text-[10px] text-gray-500">{phone}</p>
+                </div>
+                <button onClick={() => toast.success(`Calling ${phone}…`)} className="p-2 bg-[#0d9488] text-white rounded-lg hover:opacity-90">
+                  <Phone className="w-3 h-3" />
+                </button>
               </div>
-              <button onClick={() => toast.success(`Calling ${c.name}…`)} className="p-2 bg-[#0d9488] text-white rounded-lg hover:opacity-90">
-                <Phone className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -666,6 +886,57 @@ function VictimProfile() {
 export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [activePage, setActivePage] = useState<VictimPage>("dashboard");
   const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const [emergencyContacts, setEmergencyContacts] = useState<string[]>([
+    "+880 1812345678",
+    "+880 1912345678",
+  ]);
+  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>([
+    {
+      id: "rescue-1",
+      victimName: "Rafiq Islam",
+      location: "Flooded lane near Sylhet Sadar",
+      note: "Relatives report he was trapped near the embankment and lost connection. Volunteers should verify before dispatching rescue.",
+      reporter: "Amena Begum",
+      time: "7 min ago",
+      votes: { true: 12, false: 3 },
+    },
+    {
+      id: "rescue-2",
+      victimName: "Sadia Noor",
+      location: "Bashundhara, Dhaka",
+      note: "Witness says the victim may be stranded in a flooded apartment building. Please confirm location.",
+      reporter: "Neighbor",
+      time: "11 min ago",
+      votes: { true: 8, false: 1 },
+    },
+  ]);
+  const [userVotes, setUserVotes] = useState<Record<string, boolean>>({});
+
+  const handleVoteRescue = (pollId: string, vote: boolean) => {
+    const previousVote = userVotes[pollId];
+
+    if (previousVote === vote) {
+      toast.info(`You already voted ${vote ? "True" : "False"} for this poll.`);
+      return;
+    }
+
+    setRescuePolls(prev => prev.map(poll => {
+      if (poll.id !== pollId) return poll;
+
+      const updatedVotes = { ...poll.votes };
+
+      if (previousVote !== undefined) {
+        updatedVotes[previousVote ? "true" : "false"] = Math.max(0, updatedVotes[previousVote ? "true" : "false"] - 1);
+      }
+
+      updatedVotes[vote ? "true" : "false"] += 1;
+
+      return { ...poll, votes: updatedVotes };
+    }));
+
+    setUserVotes(prev => ({ ...prev, [pollId]: vote }));
+    toast.success(previousVote === undefined ? (vote ? "Confirmed as a valid rescue alert." : "Marked as not a valid rescue alert.") : `Your vote was updated to ${vote ? "True" : "False"}.`);
+  };
 
   return (
     <PortalLayout
@@ -680,11 +951,11 @@ export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) =
       notifications={notifs}
       onMarkRead={id => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))}
     >
-      {activePage === "dashboard"       && <VictimDashboard onNavigate={setActivePage} />}
-      {activePage === "request-help"    && <RequestHelp />}
+      {activePage === "dashboard"       && <VictimDashboard onNavigate={setActivePage} rescuePolls={rescuePolls} onVoteRescue={handleVoteRescue} userVotes={userVotes} />}
+      {activePage === "request-help"    && <RequestHelp onBroadcastRescue={(poll) => setRescuePolls(prev => [poll, ...prev])} />}
       {activePage === "track-requests"  && <TrackRequests />}
       {activePage === "shelters"        && <SheltersPage />}
-      {activePage === "profile"         && <VictimProfile />}
+      {activePage === "profile"         && <VictimProfile emergencyContacts={emergencyContacts} />}
     </PortalLayout>
   );
 }

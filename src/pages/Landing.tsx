@@ -10,8 +10,13 @@ import {
   PARTNER_NAMES, MAP_MARKERS
 } from "../data/mockData";
 import MapView from "../components/MapView";
+import type { UserRole } from "./Auth";
 
 type AppView = string;
+type LandingPage = "Home" | "About" | "Portals" | "Emergency Contacts" | "News";
+type AuthMode = "login" | "signup";
+
+const NAV_ITEMS: LandingPage[] = ["Home", "About", "Portals", "Emergency Contacts", "News"];
 
 const severityStyles = {
   extreme: { bg: "bg-red-600", text: "EXTREME", dot: "bg-red-300" },
@@ -32,14 +37,163 @@ function formatNumber(n: number) {
   return n.toString();
 }
 
-export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => void }) {
+export default function Landing({ onNavigate }: { onNavigate: (v: string, role?: UserRole, mode?: AuthMode) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [tickerIndex, setTickerIndex] = useState(0);
+  const [activePage, setActivePage] = useState<LandingPage>("Home");
+  const [isAlertExpanded, setIsAlertExpanded] = useState(false);
+
+  const activeAlert = ALERTS[tickerIndex];
 
   useEffect(() => {
+    if (isAlertExpanded) return;
+
     const t = setInterval(() => setTickerIndex(i => (i + 1) % ALERTS.length), 4000);
     return () => clearInterval(t);
-  }, []);
+  }, [isAlertExpanded]);
+
+  const renderPageContent = () => {
+    if (activePage === "About") {
+      return (
+        <main className="bg-[#f3f7fb]">
+          <section className="bg-[#0f1b2d] text-white py-20">
+            <div className="max-w-7xl mx-auto px-4">
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#5eead4] mb-4">About ResQHub</p>
+              <h1 className="text-4xl lg:text-5xl font-extrabold mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Helping communities respond before the next crisis hits.</h1>
+              <p className="max-w-2xl text-base text-slate-300 leading-relaxed">ResQHub connects urgent requests, trained volunteers, local shelters, and NGO partners in one transparent response system built for fast, trusted action.</p>
+            </div>
+          </section>
+
+          <section className="max-w-7xl mx-auto px-4 py-16">
+            <div className="grid lg:grid-cols-3 gap-6 mb-10">
+              {[
+                { title: "Mission", text: "Reduce response delays by turning local need into immediate action with clear coordination and trusted communication." },
+                { title: "Vision", text: "Build a resilient emergency network where volunteers, NGOs, and families can move from panic to coordinated care quickly." },
+                { title: "Approach", text: "Unify requests, shelter capacity, logistics, and communication around a single live operations map." }
+              ].map(item => (
+                <div key={item.title} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                  <p className="text-sm font-bold text-[#0f1b2d] mb-3">{item.title}</p>
+                  <p className="text-sm leading-relaxed text-slate-600">{item.text}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {[
+                { label: "People reached", value: "1.2M+" },
+                { label: "Volunteer response time", value: "12 mins" },
+                { label: "Operational districts", value: "64" },
+                { label: "Shelters coordinated", value: "234" }
+              ].map(item => (
+                <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+                  <p className="text-3xl font-extrabold text-[#0f1b2d] mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    if (activePage === "Portals") {
+      return (
+        <main className="bg-[#f3f7fb]">
+          <section className="bg-[#0f1b2d] text-white py-20">
+            <div className="max-w-7xl mx-auto px-4">
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#5eead4] mb-4">Portal Directory</p>
+              <h1 className="text-4xl lg:text-5xl font-extrabold mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Choose the role that matches your response.</h1>
+            </div>
+          </section>
+
+          <section className="max-w-7xl mx-auto px-4 py-16">
+            <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
+              {[
+                { name: "Victim Portal", color: "#dc2626", desc: "Request help, track relief, and update your situation in real time.", role: "victim" as UserRole, action: () => onNavigate("signup", "victim", "signup") },
+                { name: "Volunteer Portal", color: "#0d9488", desc: "Accept assignments, coordinate routes, and join active emergency missions.", role: "volunteer" as UserRole, action: () => onNavigate("signup", "volunteer", "signup") },
+                { name: "NGO Portal", color: "#1e3a5f", desc: "Manage shelters, volunteers, inventory, and district response operations.", role: "ngo" as UserRole, action: () => onNavigate("signup", "ngo", "signup") }
+              ].map(portal => (
+                <div key={portal.name} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm transition-transform hover:-translate-y-1">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: `${portal.color}15` }}>
+                    <div className="w-3 h-3 rounded-full" style={{ background: portal.color }} />
+                  </div>
+                  <h3 className="text-lg font-bold text-[#0f1b2d] mb-2">{portal.name}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed mb-5">{portal.desc}</p>
+                  <button onClick={portal.action} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: portal.color }}>Open portal</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    if (activePage === "Emergency Contacts") {
+      return (
+        <main className="bg-[#f3f7fb]">
+          <section className="bg-[#0f1b2d] text-white py-20">
+            <div className="max-w-7xl mx-auto px-4">
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#5eead4] mb-4">Emergency Contacts</p>
+              <h1 className="text-4xl lg:text-5xl font-extrabold mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Critical response numbers when every second matters.</h1>
+            </div>
+          </section>
+
+          <section className="max-w-7xl mx-auto px-4 py-16">
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {EMERGENCY_CONTACTS.map(contact => (
+                <div key={contact.name} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-[#dffaf6] flex items-center justify-center"><Phone className="w-4 h-4 text-[#0d9488]" /></div>
+                      <div>
+                        <p className="text-sm font-bold text-[#0f1b2d]">{contact.name}</p>
+                        <p className="text-[11px] text-slate-500">{contact.available}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-[#0d9488]">24/7</span>
+                  </div>
+                  <p className="text-xl font-extrabold text-[#0f1b2d]">{contact.number}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    if (activePage === "News") {
+      return (
+        <main className="bg-[#f3f7fb]">
+          <section className="bg-[#0f1b2d] text-white py-20">
+            <div className="max-w-7xl mx-auto px-4">
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#5eead4] mb-4">Latest News</p>
+              <h1 className="text-4xl lg:text-5xl font-extrabold mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Situation updates and relief coverage across the network.</h1>
+            </div>
+          </section>
+
+          <section className="max-w-7xl mx-auto px-4 py-16">
+            <div className="grid md:grid-cols-3 gap-6">
+              {NEWS.map(article => (
+                <article key={article.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                  <img src={article.image} alt={article.title} className="h-40 w-full object-cover" />
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-white rounded-full px-2 py-1" style={{ background: article.category === "Flood" ? "#1e3a5f" : article.category === "Cyclone" ? "#7c3aed" : "#0d9488" }}>{article.category}</span>
+                      <span className="text-[10px] text-slate-400">{article.source}</span>
+                    </div>
+                    <h3 className="text-base font-bold text-[#0f1b2d] mb-2 leading-snug">{article.title}</h3>
+                    <p className="text-sm text-slate-600 leading-relaxed">{article.summary}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className="min-h-screen" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -50,10 +204,66 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             Live Alert
           </span>
-          <p className="text-xs font-medium truncate">{ALERTS[tickerIndex].title} — {ALERTS[tickerIndex].location}</p>
-          <button className="ml-auto flex-shrink-0 text-xs underline underline-offset-2 hover:no-underline">Details →</button>
+          <p className="text-xs font-medium truncate">{activeAlert.title} — {activeAlert.location}</p>
+          <button
+            type="button"
+            onClick={() => setIsAlertExpanded(prev => !prev)}
+            className="ml-auto flex-shrink-0 text-xs underline underline-offset-2 hover:no-underline"
+          >
+            {isAlertExpanded ? "Hide Details" : "Details →"}
+          </button>
         </div>
       </div>
+
+      {isAlertExpanded && (
+        <div className="bg-[#fef2f2] border-b border-red-200 px-4 py-4">
+          <div className="max-w-7xl mx-auto grid lg:grid-cols-[1.3fr_0.7fr] gap-5">
+            <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center">
+                    {(() => {
+                      const DisasterIcon = disasterIcons[activeAlert.type];
+                      return <DisasterIcon className="w-4 h-4 text-red-600" />;
+                    })()}
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${severityStyles[activeAlert.severity].bg}`}>
+                    {severityStyles[activeAlert.severity].text}
+                  </span>
+                </div>
+                {activeAlert.evacuationOrder && (
+                  <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">EVACUATE</span>
+                )}
+              </div>
+              <h3 className="text-base font-bold text-[#0f1b2d] mb-2">{activeAlert.title}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed mb-3">{activeAlert.description}</p>
+              <div className="flex flex-wrap gap-2">
+                {activeAlert.affectedAreas.map(area => (
+                  <span key={area} className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-full border border-red-100">{area}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Alert Summary</p>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex justify-between gap-3">
+                  <span>Location</span>
+                  <span className="font-medium text-[#0f1b2d] text-right">{activeAlert.location}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Updated</span>
+                  <span className="font-medium text-[#0f1b2d] text-right">{new Date(activeAlert.timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span>Status</span>
+                  <span className="font-medium text-red-700">{activeAlert.evacuationOrder ? "Immediate response required" : "Monitoring"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navbar */}
       <nav className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
@@ -66,8 +276,15 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
           </div>
 
           <div className="hidden lg:flex items-center gap-6 ml-6">
-            {["Home", "About", "Portals", "Emergency Contacts", "News"].map(item => (
-              <a key={item} href="#" className="text-sm text-gray-600 hover:text-[#1e3a5f] font-medium transition-colors">{item}</a>
+            {NAV_ITEMS.map(item => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setActivePage(item)}
+                className={`text-sm font-medium transition-colors ${activePage === item ? "text-[#1e3a5f]" : "text-gray-600 hover:text-[#1e3a5f]"}`}
+              >
+                {item}
+              </button>
             ))}
           </div>
 
@@ -75,11 +292,11 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
 
           <div className="hidden lg:flex items-center gap-3">
             <button
-              onClick={() => onNavigate("login")}
+              onClick={() => onNavigate("login", "victim", "login")}
               className="text-sm font-medium text-[#1e3a5f] hover:underline"
             >Sign In</button>
             <button
-              onClick={() => onNavigate("signup")}
+              onClick={() => onNavigate("signup", "victim", "signup")}
               className="text-sm font-semibold text-white px-4 py-2 rounded-xl transition-all hover:opacity-90"
               style={{ background: "#1e3a5f" }}
             >Register</button>
@@ -93,19 +310,31 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
         {/* Mobile menu */}
         {menuOpen && (
           <div className="lg:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-3">
-            {["Home", "About", "Portals", "Emergency Contacts", "News"].map(item => (
-              <a key={item} href="#" className="block text-sm text-gray-700 py-1">{item}</a>
+            {NAV_ITEMS.map(item => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => {
+                  setActivePage(item);
+                  setMenuOpen(false);
+                }}
+                className="block w-full text-left text-sm text-gray-700 py-1"
+              >
+                {item}
+              </button>
             ))}
             <div className="flex gap-2 pt-2">
-              <button onClick={() => onNavigate("login")} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm font-medium text-[#1e3a5f]">Sign In</button>
-              <button onClick={() => onNavigate("signup")} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: "#1e3a5f" }}>Register</button>
+              <button onClick={() => onNavigate("login", "victim", "login")} className="flex-1 py-2 border border-gray-200 rounded-xl text-sm font-medium text-[#1e3a5f]">Sign In</button>
+              <button onClick={() => onNavigate("signup", "victim", "signup")} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: "#1e3a5f" }}>Register</button>
             </div>
           </div>
         )}
       </nav>
 
-      {/* HERO */}
-      <section className="relative overflow-hidden" style={{ background: "#0f1b2d", minHeight: "92vh" }}>
+      {activePage !== "Home" ? renderPageContent() : (
+        <>
+          {/* HERO */}
+          <section className="relative overflow-hidden" style={{ background: "#0f1b2d", minHeight: "92vh" }}>
         {/* Geometric pattern */}
         <div className="absolute inset-0 opacity-5">
           <svg width="100%" height="100%" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
@@ -144,7 +373,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
-                  onClick={() => onNavigate("victim")}
+                  onClick={() => onNavigate("signup", "victim", "signup")}
                   className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white transition-all hover:opacity-90 hover:scale-[1.02] active:scale-100"
                   style={{ background: "#dc2626" }}
                 >
@@ -152,7 +381,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
                   Request Help
                 </button>
                 <button
-                  onClick={() => onNavigate("volunteer")}
+                  onClick={() => onNavigate("signup", "volunteer", "signup")}
                   className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white transition-all hover:opacity-90 hover:scale-[1.02]"
                   style={{ background: "#0d9488" }}
                 >
@@ -160,7 +389,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
                   Become Volunteer
                 </button>
                 <button
-                  onClick={() => onNavigate("ngo")}
+                  onClick={() => onNavigate("signup", "ngo", "signup")}
                   className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white border border-white/20 hover:bg-white/10 transition-all hover:scale-[1.02]"
                 >
                   <Building2 className="w-4 h-4" />
@@ -222,8 +451,10 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
             {ALERTS.map(alert => {
               const DisasterIcon = disasterIcons[alert.type];
               const sev = severityStyles[alert.severity];
+              const isExpanded = alert.id === activeAlert.id && isAlertExpanded;
+
               return (
-                <div key={alert.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div key={alert.id} className={`bg-white rounded-2xl border p-5 shadow-sm transition-all ${isExpanded ? "border-red-200 shadow-md ring-2 ring-red-100" : "border-gray-100 hover:shadow-md"}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
@@ -235,17 +466,54 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
                       <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">EVACUATE</span>
                     )}
                   </div>
+
                   <h3 className="text-sm font-bold text-[#0f1b2d] mb-1 leading-snug">{alert.title}</h3>
-                  <p className="text-xs text-gray-500 mb-3 leading-relaxed">{alert.description.slice(0, 100)}…</p>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <p className="text-xs text-gray-500 mb-3 leading-relaxed">{isExpanded ? alert.description : `${alert.description.slice(0, 100)}…`}</p>
+
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-3">
                     <MapPin className="w-3 h-3" />
                     {alert.location}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {alert.affectedAreas.map(a => (
+
+                  {isExpanded && (
+                    <div className="space-y-3 rounded-xl bg-red-50 border border-red-100 p-3 mb-3">
+                      <div className="flex items-center justify-between text-[10px] text-gray-600">
+                        <span className="font-semibold text-red-700">Updated</span>
+                        <span>{new Date(alert.timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Affected areas</p>
+                        <div className="flex flex-wrap gap-1">
+                          {alert.affectedAreas.map(a => (
+                            <span key={a} className="text-[10px] px-2 py-0.5 bg-white border border-red-100 text-red-700 rounded-full">{a}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-gray-700">
+                        {alert.evacuationOrder
+                          ? "Mandatory evacuation is in effect for the listed zones. Follow local guidance and move to the nearest safe shelter."
+                          : "Residents should stay alert and monitor official updates while emergency crews assess the situation."}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {alert.affectedAreas.slice(0, 2).map(a => (
                       <span key={a} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{a}</span>
                     ))}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (alert.id === activeAlert.id) {
+                        setIsAlertExpanded(prev => !prev);
+                      }
+                    }}
+                    className="w-full text-xs font-semibold text-[#1e3a5f] hover:text-[#0f1b2d] transition-colors"
+                  >
+                    {isExpanded ? "Hide details" : "View details"}
+                  </button>
                 </div>
               );
             })}
@@ -483,6 +751,9 @@ export default function Landing({ onNavigate }: { onNavigate: (v: AppView) => vo
           </div>
         </div>
       </section>
+
+        </>
+      )}
 
       {/* Footer */}
       <footer style={{ background: "#0f1b2d" }} className="pt-12 pb-6">

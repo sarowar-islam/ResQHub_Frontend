@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Shield, Eye, EyeOff, ArrowLeft, Check, Heart,
-  Building2, User, Mail, Phone, Lock, AlertCircle, CheckCircle
+  Building2, User, Mail, Phone, Lock, AlertCircle, CheckCircle,
+  BriefcaseBusiness
 } from "lucide-react";
 import { toast } from "sonner";
 
 type AuthMode = "login" | "signup" | "forgot" | "otp";
-type UserRole = "victim" | "volunteer" | "ngo";
+export type UserRole = "victim" | "volunteer" | "ngo" | "admin";
+
+const DEMO_ACCOUNTS: Record<UserRole, { label: string; email: string; password: string; hint: string }> = {
+  victim: { label: "Victim Portal", email: "victim@resqhub.demo", password: "Victim@123", hint: "Role: Needs help" },
+  volunteer: { label: "Volunteer Portal", email: "volunteer@resqhub.demo", password: "Volunteer@123", hint: "Role: Community volunteer" },
+  ngo: { label: "NGO Portal", email: "ngo@resqhub.demo", password: "Ngo@123456", hint: "Role: Relief organization" },
+  admin: { label: "Admin Portal", email: "admin@resqhub.demo", password: "Admin@123456", hint: "Role: System admin" },
+};
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -45,15 +53,17 @@ function PasswordStrength({ password }: { password: string }) {
 
 interface AuthProps {
   initialMode?: AuthMode;
+  defaultRole?: UserRole;
   onNavigate: (v: string) => void;
 }
 
-export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
+export default function Auth({ initialMode = "login", defaultRole = "victim", onNavigate }: AuthProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
-  const [role, setRole] = useState<UserRole>("victim");
+  const [role, setRole] = useState<UserRole>(defaultRole);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [otpValues, setOtpValues] = useState(["", "", "", "", "", ""]);
+  const [signupMethod, setSignupMethod] = useState<"google" | "email" | "phone">("google");
 
   // Form fields
   const [email, setEmail] = useState("");
@@ -63,15 +73,28 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
   const [remember, setRemember] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    setRole(defaultRole);
+  }, [defaultRole]);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!email) e.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Invalid email address";
+    if (signupMethod === "email" || mode === "login") {
+      if (!email) e.email = "Email is required";
+      else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Invalid email address";
+    }
+    if (signupMethod === "phone" && mode === "signup") {
+      if (!phone) e.phone = "Phone number is required";
+    }
     if (!password) e.password = "Password is required";
     else if (password.length < 8) e.password = "Minimum 8 characters";
     if (mode === "signup") {
       if (!name) e.name = "Full name is required";
-      if (!phone) e.phone = "Phone number is required";
+      if (signupMethod !== "google" && !phone) e.phone = "Phone number is required";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -80,6 +103,19 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+
+    if (mode === "login") {
+      const demoAccount = DEMO_ACCOUNTS[role];
+      if (email.toLowerCase() !== demoAccount.email || password !== demoAccount.password) {
+        setErrors({
+          email: "Use the demo credentials shown below.",
+          password: "Use the demo credentials shown below.",
+        });
+        toast.error(`Invalid login for ${demoAccount.label}. Use the demo credentials below.`);
+        return;
+      }
+    }
+
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
@@ -116,9 +152,10 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
   };
 
   const roleConfig = {
-    victim:    { icon: User,      label: "I Need Help",    desc: "Disaster-affected individual",  color: "#dc2626" },
-    volunteer: { icon: Heart,     label: "I Want to Help", desc: "Register as a volunteer",        color: "#0d9488" },
-    ngo:       { icon: Building2, label: "Organization",   desc: "NGO or relief organization",     color: "#1e3a5f" },
+    victim:    { icon: User,            label: "I Need Help",      desc: "Disaster-affected individual",  color: "#dc2626" },
+    volunteer: { icon: Heart,           label: "I Want to Help",   desc: "Register as a volunteer",        color: "#0d9488" },
+    ngo:       { icon: Building2,       label: "Organization",     desc: "NGO or relief organization",     color: "#1e3a5f" },
+    admin:     { icon: BriefcaseBusiness, label: "Admin Access",    desc: "Operations and oversight",       color: "#7c3aed" },
   };
 
   return (
@@ -249,11 +286,10 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
                   : "Join ResQHub and start making a difference today."}
               </p>
 
-              {/* Role selector (signup only) */}
-              {mode === "signup" && (
+              {(mode === "login" || mode === "signup") && (
                 <div className="mb-5">
-                  <label className="block text-xs font-semibold text-[#0f1b2d] mb-2">I am registering as a…</label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <label className="block text-xs font-semibold text-[#0f1b2d] mb-2">{mode === "login" ? "Continue as…" : "I am registering as a…"}</label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {(Object.entries(roleConfig) as [UserRole, typeof roleConfig.victim][]).map(([r, cfg]) => {
                       const Icon = cfg.icon;
                       const isActive = role === r;
@@ -261,16 +297,49 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
                         <button
                           key={r}
                           type="button"
-                          onClick={() => setRole(r)}
+                          onClick={() => {
+                            setRole(r);
+                            const demoAccount = DEMO_ACCOUNTS[r];
+                            if (mode === "login") {
+                              setEmail(demoAccount.email);
+                              setPassword(demoAccount.password);
+                            }
+                          }}
                           className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${isActive ? "border-2" : "border-gray-200 hover:border-gray-300"}`}
                           style={isActive ? { borderColor: cfg.color, background: cfg.color + "10" } : {}}
                         >
                           <Icon className="w-4 h-4" style={{ color: isActive ? cfg.color : "#6b7280" }} />
-                          <span className="text-[11px] font-bold" style={{ color: isActive ? cfg.color : "#374151" }}>{cfg.label}</span>
-                          <span className="text-[9px] text-gray-400 leading-tight">{cfg.desc}</span>
+                          <span className="text-[10px] font-bold" style={{ color: isActive ? cfg.color : "#374151" }}>{cfg.label}</span>
+                          <span className="text-[8px] text-gray-400 leading-tight">{cfg.desc}</span>
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {mode === "login" && (
+                <div className="mb-5 rounded-2xl border border-[#dffaf6] bg-[#f0fdfb] p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#0d9488] mb-2">Demo credentials</p>
+                  <div className="space-y-2 text-[11px] text-slate-600">
+                    {(Object.entries(DEMO_ACCOUNTS) as [UserRole, typeof DEMO_ACCOUNTS.victim][]).map(([key, item]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setRole(key);
+                          setEmail(item.email);
+                          setPassword(item.password);
+                        }}
+                        className="w-full text-left rounded-xl bg-white px-2.5 py-2 border border-[#d7f5ee] hover:border-[#0d9488] transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-[#0f1b2d]">{item.label}</span>
+                          <span className="text-[10px] text-[#0d9488]">Use</span>
+                        </div>
+                        <div className="mt-1 text-[10px] text-slate-500">{item.email} / {item.password}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
@@ -314,21 +383,23 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
                 )}
 
                 {/* Email */}
-                <div>
-                  <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="email" value={email} onChange={e => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.email ? "border-red-400" : "border-gray-200"}`}
-                    />
+                {(signupMethod === "email" || mode === "login") && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="email" value={email} onChange={e => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.email ? "border-red-400" : "border-gray-200"}`}
+                      />
+                    </div>
+                    {errors.email && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email}</p>}
                   </div>
-                  {errors.email && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email}</p>}
-                </div>
+                )}
 
-                {/* Phone (signup) */}
-                {mode === "signup" && (
+                {/* Phone */}
+                {(mode === "signup" && (signupMethod === "phone" || signupMethod === "email")) && (
                   <div>
                     <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Phone Number</label>
                     <div className="relative">
@@ -402,12 +473,6 @@ export default function Auth({ initialMode = "login", onNavigate }: AuthProps) {
                   {mode === "login" ? "Create one free" : "Sign in"}
                 </button>
               </p>
-
-              {mode === "login" && (
-                <p className="text-[11px] text-center text-gray-400 mt-3">
-                  Demo: click Sign In to access any portal. No real account needed.
-                </p>
-              )}
             </>
           )}
         </div>

@@ -6,6 +6,7 @@ interface MapViewProps {
   markers: MapMarker[];
   className?: string;
   height?: string;
+  onSelectLocation?: (location: string) => void;
 }
 
 const MARKER_CONFIG = {
@@ -20,7 +21,7 @@ const MARKER_CONFIG = {
 const toX = (lng: number) => Math.max(2, Math.min(98, ((lng - 88.0) / 4.7) * 100));
 const toY = (lat: number) => Math.max(2, Math.min(98, (1 - (lat - 20.6) / 6.0) * 100));
 
-export default function MapView({ markers, className = "", height = "h-80" }: MapViewProps) {
+export default function MapView({ markers, className = "", height = "h-80", onSelectLocation }: MapViewProps) {
   const [active, setActive] = useState<MapMarker | null>(null);
 
   return (
@@ -77,7 +78,13 @@ export default function MapView({ markers, className = "", height = "h-80" }: Ma
             key={marker.id}
             className="absolute cursor-pointer"
             style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)", zIndex: isActive ? 20 : 10 }}
-            onClick={() => setActive(isActive ? null : marker)}
+            onClick={() => {
+              const nextActive = isActive ? null : marker;
+              setActive(nextActive);
+              if (onSelectLocation && nextActive) {
+                onSelectLocation(nextActive.location.label);
+              }
+            }}
           >
             <div
               className="w-4 h-4 rounded-full border-2 border-white shadow-lg transition-transform hover:scale-125"
