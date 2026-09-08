@@ -63,11 +63,12 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [otpValues, setOtpValues] = useState(["", "", "", "", "", ""]);
-  const [signupMethod, setSignupMethod] = useState<"google" | "email" | "phone">("google");
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
 
   // Form fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [remember, setRemember] = useState(false);
@@ -83,18 +84,15 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (signupMethod === "email" || mode === "login") {
-      if (!email) e.email = "Email is required";
-      else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Invalid email address";
-    }
-    if (signupMethod === "phone" && mode === "signup") {
-      if (!phone) e.phone = "Phone number is required";
-    }
+    if (!email) e.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Invalid email address";
     if (!password) e.password = "Password is required";
     else if (password.length < 8) e.password = "Minimum 8 characters";
     if (mode === "signup") {
-      if (!name) e.name = "Full name is required";
-      if (signupMethod !== "google" && !phone) e.phone = "Phone number is required";
+      if (!name.trim()) e.name = "Full name is required";
+      if (phone && !/^\+?[\d\s-]{7,15}$/.test(phone.trim())) e.phone = "Enter a valid phone number";
+      if (!confirmPassword) e.confirmPassword = "Please confirm your password";
+      else if (password !== confirmPassword) e.confirmPassword = "Passwords do not match";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -114,19 +112,14 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
         toast.error(`Invalid login for ${demoAccount.label}. Use the demo credentials below.`);
         return;
       }
+      // Login success - go to portal, email is "verified" for demo
+      toast.success("Welcome back! Redirecting to your dashboard…");
+      setTimeout(() => onNavigate(role), 800);
+    } else if (mode === "signup") {
+      // For signup, always go to email OTP first (skippable)
+      setMode("otp");
+      toast.info("OTP sent to your email address.");
     }
-
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (mode === "login") {
-        toast.success("Welcome back! Redirecting to your dashboard…");
-        setTimeout(() => onNavigate(role), 800);
-      } else if (mode === "signup") {
-        setMode("otp");
-        toast.info("OTP sent to your phone number.");
-      }
-    }, 1200);
   };
 
   const handleForgot = (e: React.FormEvent) => {
@@ -149,6 +142,12 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
       toast.success("Account verified! Welcome to ResQHub.");
       onNavigate(role);
     }, 1000);
+  };
+
+  const skipOtp = () => {
+    // Skip email verification for now - can verify later in profile
+    toast.success("Account created! You can verify your email later in your profile.");
+    onNavigate(role);
   };
 
   const roleConfig = {
@@ -209,10 +208,10 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
           {mode === "otp" && (
             <div>
               <div className="w-12 h-12 rounded-2xl bg-teal-100 flex items-center justify-center mx-auto mb-4">
-                <Shield className="w-6 h-6 text-teal-600" />
+                <Mail className="w-6 h-6 text-teal-600" />
               </div>
-              <h2 className="text-2xl font-extrabold text-[#0f1b2d] text-center mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Verify your number</h2>
-              <p className="text-sm text-gray-500 text-center mb-7">We sent a 6-digit code to <strong>{phone || "+880 XXXXXXXXXX"}</strong></p>
+              <h2 className="text-2xl font-extrabold text-[#0f1b2d] text-center mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Verify your email</h2>
+              <p className="text-sm text-gray-500 text-center mb-7">We sent a 6-digit code to <strong>{email}</strong></p>
               <div className="flex gap-3 justify-center mb-6">
                 {otpValues.map((v, i) => (
                   <input
@@ -237,15 +236,21 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
               <button
                 onClick={handleOtpSubmit}
                 disabled={loading}
-                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2 mb-3"
                 style={{ background: "#1e3a5f" }}
               >
                 {loading ? <span className="animate-spin rounded-full border-2 border-white border-t-transparent w-4 h-4" /> : <Check className="w-4 h-4" />}
                 Verify & Continue
               </button>
+              <button
+                onClick={skipOtp}
+                className="w-full py-2.5 rounded-xl text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Skip for now
+              </button>
               <p className="text-xs text-center text-gray-400 mt-4">
                 Didn't receive it?{" "}
-                <button onClick={() => toast.info("New OTP sent.")} className="text-[#0d9488] font-medium hover:underline">Resend OTP</button>
+                <button onClick={() => toast.info("New OTP sent to your email.")} className="text-[#0d9488] font-medium hover:underline">Resend OTP</button>
               </p>
             </div>
           )}
@@ -373,7 +378,7 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
-                        type="text" value={name} onChange={e => setName(e.target.value)}
+                        type="text" value={name} onChange={e => { setName(e.target.value); if (errors.name) setErrors(prev => ({ ...prev, name: "" })); }}
                         placeholder="Mohammad Rafiqul Islam"
                         className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.name ? "border-red-400" : "border-gray-200"}`}
                       />
@@ -383,34 +388,37 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                 )}
 
                 {/* Email */}
-                {(signupMethod === "email" || mode === "login") && (
-                  <div>
-                    <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Email Address</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="email" value={email} onChange={e => setEmail(e.target.value)}
-                        placeholder="you@example.com"
-                        className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.email ? "border-red-400" : "border-gray-200"}`}
-                      />
-                    </div>
-                    {errors.email && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email}</p>}
+                <div>
+                  <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="email" value={email} onChange={e => { setEmail(e.target.value); if (errors.email) setErrors(prev => ({ ...prev, email: "" })); }}
+                      placeholder="you@example.com"
+                      className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.email ? "border-red-400" : "border-gray-200"}`}
+                    />
                   </div>
-                )}
+                  {errors.email && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.email}</p>}
+                </div>
 
-                {/* Phone */}
-                {(mode === "signup" && (signupMethod === "phone" || signupMethod === "email")) && (
+                {/* Phone (signup, optional) */}
+                {mode === "signup" && (
                   <div>
-                    <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Phone Number</label>
+                    <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">
+                      Phone Number <span className="font-normal text-gray-400">(optional)</span>
+                    </label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
-                        type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                        type="tel" value={phone} onChange={e => { setPhone(e.target.value); if (errors.phone) setErrors(prev => ({ ...prev, phone: "" })); }}
                         placeholder="+880 17XXXXXXXX"
                         className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.phone ? "border-red-400" : "border-gray-200"}`}
                       />
                     </div>
-                    {errors.phone && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.phone}</p>}
+                    {errors.phone
+                      ? <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.phone}</p>
+                      : <p className="text-[10px] text-gray-400 mt-1">You can add or update this later in your profile.</p>
+                    }
                   </div>
                 )}
 
@@ -437,6 +445,27 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                   {errors.password && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.password}</p>}
                   {mode === "signup" && <PasswordStrength password={password} />}
                 </div>
+
+                {/* Confirm password (signup) */}
+                {mode === "signup" && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#0f1b2d] mb-1.5">Confirm Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type={showConfirmPass ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={e => { setConfirmPassword(e.target.value); if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: "" })); }}
+                        placeholder="••••••••"
+                        className={`w-full pl-10 pr-10 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.confirmPassword ? "border-red-400" : "border-gray-200"}`}
+                      />
+                      <button type="button" onClick={() => setShowConfirmPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {errors.confirmPassword && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.confirmPassword}</p>}
+                  </div>
+                )}
 
                 {/* Remember me */}
                 {mode === "login" && (
@@ -467,7 +496,7 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
               <p className="text-xs text-center text-gray-500 mt-5">
                 {mode === "login" ? "Don't have an account? " : "Already have an account? "}
                 <button
-                  onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErrors({}); }}
+                  onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErrors({}); setConfirmPassword(""); setShowConfirmPass(false); }}
                   className="font-semibold text-[#0d9488] hover:underline"
                 >
                   {mode === "login" ? "Create one free" : "Sign in"}

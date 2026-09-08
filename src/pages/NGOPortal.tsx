@@ -15,6 +15,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
+import { useSession } from "../context/SessionContext";
 
 type NGOPage = "dashboard" | "campaigns" | "shelters" | "inventory" | "reports" | "volunteers";
 
@@ -158,11 +159,18 @@ function NGODashboard() {
 
 // ─── Campaigns ────────────────────────────────────────────────────────────────
 function CampaignsPage() {
+  const session = useSession();
   const [showCreate, setShowCreate] = useState(false);
   const [campaigns, setCampaigns] = useState(CAMPAIGNS);
   const [newTitle, setNewTitle] = useState("");
 
   const create = () => {
+    // Gate: Email must be verified
+    if (!session.emailVerified) {
+      toast.error("Please verify your email before creating campaigns.");
+      return;
+    }
+
     if (!newTitle.trim()) { toast.error("Campaign title required."); return; }
     const newC = {
       id: `camp-new-${Date.now()}`,

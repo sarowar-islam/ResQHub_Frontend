@@ -13,6 +13,7 @@ import {
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
 import { MAP_MARKERS } from "../data/mockData";
+import { useSession } from "../context/SessionContext";
 
 type VictimPage = "dashboard" | "request-help" | "track-requests" | "shelters" | "profile";
 
@@ -258,6 +259,7 @@ function VictimDashboard({
 
 // ─── Request Help ─────────────────────────────────────────────────────────────
 function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePoll) => void }) {
+  const session = useSession();
   const [type, setType] = useState("");
   const [priority, setPriority] = useState("");
   const [description, setDescription] = useState("");
@@ -273,6 +275,13 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Gate: Email must be verified
+    if (!session.emailVerified) {
+      toast.error("Please verify your email before requesting help.");
+      return;
+    }
+
     if (!type || !priority || !description) {
       toast.error("Please fill in all required fields.");
       return;

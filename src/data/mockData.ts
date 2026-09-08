@@ -157,11 +157,13 @@ export interface AppUser {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: UserRole;
   status: "active" | "suspended" | "pending";
   joinedAt: string;
   location: string;
   verified: boolean;
+  emailVerified: boolean; // New field for email verification status
 }
 
 export interface ChartDataPoint {
@@ -679,18 +681,18 @@ export const NEWS: NewsItem[] = [
 ];
 
 export const USERS: AppUser[] = [
-  { id: "user-001", name: "Mohammad Rafiqul Islam", email: "rafiq@email.com", role: "victim", status: "active", joinedAt: "2024-06-10", location: "Sylhet", verified: true },
-  { id: "user-002", name: "Karim Ahmed", email: "karim@email.com", role: "volunteer", status: "active", joinedAt: "2023-01-15", location: "Sylhet", verified: true },
-  { id: "user-003", name: "BRAC Disaster Response", email: "disaster@brac.net", role: "ngo", status: "active", joinedAt: "2023-01-01", location: "Dhaka", verified: true },
-  { id: "user-004", name: "Fatema Begum", email: "fatema@email.com", role: "victim", status: "active", joinedAt: "2024-06-12", location: "Sylhet", verified: false },
-  { id: "user-005", name: "Sadia Rahman", email: "sadia@email.com", role: "volunteer", status: "active", joinedAt: "2023-03-20", location: "Dhaka", verified: true },
-  { id: "user-006", name: "Charity Aid Foundation BD", email: "info@caf.org", role: "ngo", status: "pending", joinedAt: "2024-06-01", location: "Chattogram", verified: false },
-  { id: "user-007", name: "Abdul Karim", email: "abdul@email.com", role: "victim", status: "active", joinedAt: "2024-06-14", location: "Dhaka", verified: false },
-  { id: "user-008", name: "Nasrin Sultana", email: "nasrin@email.com", role: "volunteer", status: "active", joinedAt: "2022-11-01", location: "Cox's Bazar", verified: true },
-  { id: "user-009", name: "Rina Akter", email: "rina@email.com", role: "victim", status: "active", joinedAt: "2024-06-14", location: "Rajshahi", verified: true },
-  { id: "user-010", name: "Raju Miah", email: "raju@email.com", role: "volunteer", status: "active", joinedAt: "2023-06-10", location: "Rajshahi", verified: true },
-  { id: "user-011", name: "Jamal Hossain", email: "jamal@email.com", role: "victim", status: "active", joinedAt: "2024-06-15", location: "Cox's Bazar", verified: false },
-  { id: "user-012", name: "Tanvir Hasan", email: "tanvir@email.com", role: "volunteer", status: "active", joinedAt: "2024-01-10", location: "Sylhet", verified: true },
+  { id: "user-001", name: "Mohammad Rafiqul Islam", email: "rafiq@email.com", phone: "+8801712345678", role: "victim", status: "active", joinedAt: "2024-06-10", location: "Sylhet", verified: true, emailVerified: true },
+  { id: "user-002", name: "Karim Ahmed", email: "karim@email.com", phone: "+8801711111111", role: "volunteer", status: "active", joinedAt: "2023-01-15", location: "Sylhet", verified: true, emailVerified: true },
+  { id: "user-003", name: "BRAC Disaster Response", email: "disaster@brac.net", phone: "+8802-9881265", role: "ngo", status: "active", joinedAt: "2023-01-01", location: "Dhaka", verified: true, emailVerified: true },
+  { id: "user-004", name: "Fatema Begum", email: "fatema@email.com", phone: "+8801812345678", role: "victim", status: "active", joinedAt: "2024-06-12", location: "Sylhet", verified: false, emailVerified: false },
+  { id: "user-005", name: "Sadia Rahman", email: "sadia@email.com", phone: "+8801722222222", role: "volunteer", status: "active", joinedAt: "2023-03-20", location: "Dhaka", verified: true, emailVerified: true },
+  { id: "user-006", name: "Charity Aid Foundation BD", email: "info@caf.org", phone: "+8801899001122", role: "ngo", status: "pending", joinedAt: "2024-06-01", location: "Chattogram", verified: false, emailVerified: false },
+  { id: "user-007", name: "Abdul Karim", email: "abdul@email.com", phone: "+8801912345678", role: "victim", status: "active", joinedAt: "2024-06-14", location: "Dhaka", verified: false, emailVerified: false },
+  { id: "user-008", name: "Nasrin Sultana", email: "nasrin@email.com", phone: "+8801744444444", role: "volunteer", status: "active", joinedAt: "2022-11-01", location: "Cox's Bazar", verified: true, emailVerified: true },
+  { id: "user-009", name: "Rina Akter", email: "rina@email.com", phone: "+8801512345678", role: "victim", status: "active", joinedAt: "2024-06-14", location: "Rajshahi", verified: true, emailVerified: true },
+  { id: "user-010", name: "Raju Miah", email: "raju@email.com", phone: "+8801733333333", role: "volunteer", status: "active", joinedAt: "2023-06-10", location: "Rajshahi", verified: true, emailVerified: true },
+  { id: "user-011", name: "Jamal Hossain", email: "jamal@email.com", phone: "+8801612345678", role: "victim", status: "active", joinedAt: "2024-06-15", location: "Cox's Bazar", verified: false, emailVerified: false },
+  { id: "user-012", name: "Tanvir Hasan", email: "tanvir@email.com", phone: "+8801755555555", role: "volunteer", status: "active", joinedAt: "2024-01-10", location: "Sylhet", verified: true, emailVerified: true },
 ];
 
 export const CHART_DATA: ChartDataPoint[] = [

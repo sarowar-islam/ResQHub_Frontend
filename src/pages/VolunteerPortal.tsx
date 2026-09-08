@@ -12,6 +12,7 @@ import { HELP_REQUESTS, VOLUNTEERS, NOTIFICATIONS } from "../data/mockData";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
 import { MAP_MARKERS } from "../data/mockData";
+import { useSession } from "../context/SessionContext";
 
 type VolunteerPage = "dashboard" | "missions" | "history" | "profile";
 
@@ -153,6 +154,7 @@ function VolunteerDashboard({ isAvailable, setIsAvailable }: { isAvailable: bool
 
 // ─── Missions ─────────────────────────────────────────────────────────────────
 function Missions() {
+  const session = useSession();
   const [view, setView] = useState<"list" | "map">("list");
   const [requests, setRequests] = useState(HELP_REQUESTS.filter(r => r.status === "pending" || r.status === "accepted"));
   const [selected, setSelected] = useState<typeof HELP_REQUESTS[0] | null>(null);
@@ -160,6 +162,12 @@ function Missions() {
   const [report, setReport] = useState("");
 
   const accept = (id: string) => {
+    // Gate: Email must be verified
+    if (!session.emailVerified) {
+      toast.error("Please verify your email before accepting missions.");
+      return;
+    }
+
     setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "assigned" as const } : r));
     toast.success("Mission accepted! Navigate to location.");
   };

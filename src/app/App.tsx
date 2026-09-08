@@ -6,20 +6,25 @@ import VictimPortal from "../pages/VictimPortal";
 import VolunteerPortal from "../pages/VolunteerPortal";
 import NGOPortal from "../pages/NGOPortal";
 import AdminPortal from "../pages/AdminPortal";
+import { SessionProvider, useSession } from "../context/SessionContext";
 
 type AppView = "landing" | "login" | "signup" | "victim" | "volunteer" | "ngo" | "admin";
 type AuthMode = "login" | "signup";
 
-export default function App() {
+function AppContent() {
   const [view, setView] = useState<AppView>("landing");
   const [authRole, setAuthRole] = useState<UserRole>("victim");
   const [authMode, setAuthMode] = useState<AuthMode>("signup");
+  const session = useSession();
 
   const navigate = (v: string, role: UserRole = "victim", mode: AuthMode = "signup") => {
     setView(v as AppView);
     if (v === "login" || v === "signup") {
       setAuthRole(role);
       setAuthMode(mode);
+    }
+    if (v === "landing") {
+      session.logout();
     }
   };
 
@@ -46,5 +51,13 @@ export default function App() {
       {view === "ngo" && <NGOPortal onNavigate={navigate} />}
       {view === "admin" && <AdminPortal onNavigate={navigate} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <SessionProvider>
+      <AppContent />
+    </SessionProvider>
   );
 }

@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { Notification } from "../data/mockData";
 import AIChat from "./AIChat";
+import VerifyEmailBanner from "./VerifyEmailBanner";
+import { useSession } from "../context/SessionContext";
 
 interface NavItem {
   id: string;
@@ -51,6 +53,8 @@ export default function PortalLayout({
   const [profileOpen, setProfileOpen] = useState(false);
   const [searchVal, setSearchVal] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
+  const [showBanner, setShowBanner] = useState(true);
+  const session = useSession();
 
   const unread = notifications.filter(n => !n.read).length;
 
@@ -273,6 +277,11 @@ export default function PortalLayout({
             )}
           </div>
         </header>
+
+        {/* Verify Email Banner */}
+        {!session.emailVerified && showBanner && (
+          <VerifyEmailBanner onClose={() => setShowBanner(false)} />
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
