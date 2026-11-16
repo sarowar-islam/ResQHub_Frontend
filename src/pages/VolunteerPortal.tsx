@@ -601,7 +601,7 @@ export default function VolunteerPortal({ onNavigate }: { onNavigate: (v: string
     setRescuePolls(prev => prev.map(poll => {
       if (poll.id !== pollId) return poll;
       const heartedBy = hasHearted ? (poll.heartedBy ?? []).filter(id => id !== meId) : [...(poll.heartedBy ?? []), meId];
-      return { ...poll, heartedBy, hearts: heartedBy.length };
+      return { ...poll, heartedBy, hearts: Math.max(0, poll.hearts + (hasHearted ? -1 : 1)) };
     }));
     toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert");
   };
