@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Send, Bot, User, Loader2, Zap } from "lucide-react";
-import { db } from "../context/DataContext";
+import { X, Send, Bot, User, Loader2, Zap, RotateCcw } from "lucide-react";
+import { sendAiChat } from "../lib/api";
 
 interface Message {
   id: string;
@@ -10,10 +10,10 @@ interface Message {
 }
 
 const SUGGESTED_PROMPTS = [
-  { label: "Summarize field report", key: "summarize" },
-  { label: "Prioritize requests", key: "prioritize" },
-  { label: "Recommend nearby shelter", key: "shelter" },
-  { label: "Generate relief summary", key: "generate" },
+  { label: "Current operations", key: "operations" },
+  { label: "Prioritize open requests", key: "prioritize" },
+  { label: "Shelter capacity", key: "shelters" },
+  { label: "Low relief supplies", key: "supplies" },
 ];
 
 interface AIChatProps {
@@ -21,20 +21,31 @@ interface AIChatProps {
   onClose: () => void;
 }
 
+const createWelcomeMessage = (): Message => ({
+  id: "init",
+  role: "assistant",
+  content: "Hi! I can check the latest information saved in ResQHub, including requests, shelters, volunteers, campaigns, supplies, and alerts. What would you like to know?",
+  timestamp: new Date(),
+});
+
 function formatContent(text: string) {
   const lines = text.split("\n");
   return lines.map((line, i) => {
     if (line.startsWith("**") && line.endsWith("**")) {
       return <p key={i} className="font-bold text-[#0f1b2d] mb-1">{line.slice(2, -2)}</p>;
     }
-    if (line.startsWith("1.") || line.startsWith("2.") || line.startsWith("3.") || line.startsWith("4.") || line.startsWith("5.")) {
-      const parts = line.replace(/\*\*/g, "").split(" — ");
+    const numbered = line.match(/^(\d+)[.)]\s+(.+)$/);
+    if (numbered) {
+      const parts = numbered[2].replace(/\*\*/g, "").split(" — ");
       return (
         <p key={i} className="mb-0.5 text-xs">
-          <span className="font-semibold">{parts[0]}</span>
+          <span className="font-semibold">{numbered[1]}. {parts[0]}</span>
           {parts[1] ? <span className="text-[#5a7190]"> — {parts[1]}</span> : null}
         </p>
       );
+    }
+    if (/^[-*]\s+/.test(line)) {
+      return <p key={i} className="mb-0.5 pl-2 text-xs">• {line.slice(2)}</p>;
     }
     if (line.trim() === "") return <div key={i} className="h-1" />;
     const escaped = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -43,49 +54,8 @@ function formatContent(text: string) {
   });
 }
 
-// Answers are built from the live records the signed-in user can see (no canned text).
-function answer(text: string): string {
-  const lower = text.toLowerCase();
-  const reqs = db.helpRequests;
-  const open = reqs.filter(r => ["pending", "accepted", "assigned"].includes(r.status));
-  const byType = (list: typeof reqs) => {
-    const c: Record<string, number> = {};
-    list.forEach(r => { c[r.type] = (c[r.type] ?? 0) + 1; });
-    return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${v}`).join(", ") || "none";
-  };
-
-  if (lower.includes("summar")) {
-    if (!reqs.length) return "There are no help requests visible to you yet.";
-    const done = reqs.filter(r => r.status === "completed").length;
-    return `Right now there are ${reqs.length} requests: ${open.length} open (${db.stats.criticalRequests} critical) and ${done} completed. Open requests by type - ${byType(open)}. ${db.volunteers.filter(v => v.isAvailable).length} volunteers are marked available.`;
-  }
-  if (lower.includes("prior")) {
-    const rank = { critical: 0, high: 1, medium: 2, low: 3 } as Record<string, number>;
-    const top = open.filter(r => r.status !== "assigned").sort((a, b) => rank[a.priority] - rank[b.priority] || a.createdAt.localeCompare(b.createdAt)).slice(0, 5);
-    if (!top.length) return "No unassigned open requests need prioritising right now.";
-    return "Suggested order of response:\n" + top.map((r, i) => `${i + 1}. ${r.priority.toUpperCase()} - ${r.type} for ${r.victimName} at ${r.location.label}`).join("\n");
-  }
-  if (lower.includes("shelter")) {
-    const shelters = db.shelters.filter(s => s.status !== "closed").sort((a, b) => (b.capacity - b.currentOccupancy) - (a.capacity - a.currentOccupancy));
-    if (!shelters.length) return "No open shelters are registered yet.";
-    return "Shelters with the most free space:\n" + shelters.slice(0, 5).map(s => `- ${s.name} (${s.location.label}): ${s.capacity - s.currentOccupancy} places free of ${s.capacity}`).join("\n");
-  }
-  if (lower.includes("relief") || lower.includes("generat") || lower.includes("report")) {
-    const done = reqs.filter(r => r.status === "completed");
-    return `Relief report - ${new Date().toLocaleDateString()}\nTotal requests: ${reqs.length}\nCompleted: ${done.length}\nOpen: ${open.length}\nRequests by type: ${byType(reqs)}\nVolunteers registered: ${db.volunteers.length}\nOpen shelters: ${db.shelters.filter(s => s.status !== "closed").length}`;
-  }
-  return "I can summarise current requests, suggest which to prioritise, list shelters with free space, or generate a relief report. Try asking for one of those.";
-}
-
 export default function AIChat({ isOpen, onClose }: AIChatProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "init",
-      role: "assistant",
-      content: "Hello! I'm ResQHub AI, your coordination assistant. I can help you summarize field reports, prioritize requests, find shelters, and generate relief summaries. How can I assist?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => [createWelcomeMessage()]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -94,20 +64,33 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const sendMessage = (text: string) => {
+  const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
     const userMsg: Message = { id: Date.now().toString(), role: "user", content: text, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
     setLoading(true);
 
-    setTimeout(() => {
-      const response = answer(text);
-
-      const aiMsg: Message = { id: (Date.now() + 1).toString(), role: "assistant", content: response, timestamp: new Date() };
+    try {
+      const history = [...messages.filter(message => message.id !== "init"), userMsg]
+        .map(({ role, content }) => ({ role, content }))
+        .slice(-12);
+      if (history[0]?.role === "assistant") history.shift();
+      const { reply } = await sendAiChat(history);
+      const aiMsg: Message = { id: (Date.now() + 1).toString(), role: "assistant", content: reply, timestamp: new Date() };
       setMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `I couldn't reach the AI assistant: ${message}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, aiMsg]);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   if (!isOpen) return null;
@@ -122,13 +105,18 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
           </div>
           <div className="flex-1">
             <p className="text-sm font-bold text-white">ResQHub AI</p>
-            <p className="text-[10px] text-blue-200">Emergency Response Assistant</p>
+            <p className="text-[10px] text-blue-200">Supabase project data · Gemini AI</p>
           </div>
-          <div className="flex items-center gap-1.5 mr-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] text-blue-200">Online</span>
-          </div>
-          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+          <button
+            onClick={() => setMessages([createWelcomeMessage()])}
+            disabled={loading}
+            title="Start a new chat"
+            aria-label="Start a new chat"
+            className="text-white/60 hover:text-white transition-colors disabled:opacity-40"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+          <button onClick={onClose} title="Close chat" aria-label="Close chat" className="text-white/60 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -191,7 +179,9 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
-              placeholder="Ask about emergency response..."
+              maxLength={4000}
+              aria-label="Message ResQHub AI"
+              placeholder="Ask about current requests, shelters, or supplies..."
               rows={1}
               className="flex-1 resize-none text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10 transition-all"
               style={{ minHeight: "36px", maxHeight: "80px" }}

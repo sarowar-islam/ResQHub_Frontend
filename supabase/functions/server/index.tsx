@@ -259,6 +259,152 @@ app.get(`${PREFIX}/bootstrap`, async (c) => {
   }
 });
 
+app.post(`${PREFIX}/chat`, async (c) => {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) return c.json({ error: "AI chat is not configured. Set the GEMINI_API_KEY function secret." }, 503);
+
+  try {
+    const user = await getAuthUser(c);
+    if (!user) return c.json({ error: "Not signed in" }, 401);
+    const { profile, error } = await ensureProfile(user);
+    if (error || !profile) return c.json({ error }, 403);
+    if (profile.status === "suspended") return c.json({ error: "This account has been suspended." }, 403);
+
+    const body = await c.req.json();
+    if (!Array.isArray(body?.messages) || body.messages.length === 0 || body.messages.length > 12) {
+      return c.json({ error: "Provide between 1 and 12 chat messages." }, 400);
+    }
+    const messages = body.messages;
+    if (messages.some((message: any) =>
+      (message?.role !== "user" && message?.role !== "assistant") ||
+      typeof message.content !== "string" ||
+      !message.content.trim() ||
+      message.content.length > 4000
+    )) {
+      return c.json({ error: "Each chat message must have a valid role and contain 1 to 4000 characters." }, 400);
+    }
+    if (
+      messages[0].role !== "user" ||
+      messages[messages.length - 1].role !== "user" ||
+      messages.some((message: any, index: number) => index > 0 && message.role === messages[index - 1].role)
+    ) {
+      return c.json({ error: "Chat messages must alternate, starting and ending with a user message." }, 400);
+    }
+
+    const viewer: Viewer = { id: user.id, role: profile.role };
+    const data = await scoped(viewer, [
+      "helpRequests", "shelters", "volunteers", "ngos", "campaigns", "inventory", "alerts",
+    ]);
+    const openRequests = data.helpRequests.filter((r) => ["pending", "accepted", "assigned"].includes(r.status));
+    const counts = (records: Record<string, any>[], key: string) => records.reduce((result, record) => {
+      const value = String(record[key] || "unknown");
+      result[value] = (result[value] || 0) + 1;
+      return result;
+    }, {} as Record<string, number>);
+    const recentRequests = [...data.helpRequests]
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .slice(0, 40)
+      .map((r) => ({
+        reference: r.id,
+        type: r.type,
+        priority: r.priority,
+        status: r.status,
+        district: r.location?.district || "Not specified",
+        createdAt: r.createdAt,
+      }));
+    const context = {
+      snapshotAt: new Date().toISOString(),
+      viewerRole: profile.role,
+      requests: {
+        totalVisible: data.helpRequests.length,
+        open: openRequests.length,
+        completed: data.helpRequests.filter((r) => r.status === "completed").length,
+        byStatus: counts(data.helpRequests, "status"),
+        openByType: counts(openRequests, "type"),
+        openByPriority: counts(openRequests, "priority"),
+        openByDistrict: counts(openRequests.map((r) => ({ district: r.location?.district })), "district"),
+        recentRecords: recentRequests,
+      },
+      availableVolunteers: data.volunteers.filter((v) => v.isAvailable).length,
+      shelters: data.shelters
+        .filter((s) => s.status !== "closed")
+        .map((s) => ({
+          name: s.name,
+          district: s.location?.district || s.location,
+          status: s.status,
+          occupancy: s.currentOccupancy,
+          capacity: s.capacity,
+          freePlaces: Math.max(0, s.capacity - s.currentOccupancy),
+          facilities: s.facilities,
+          hasMedical: s.hasMedical,
+          hasFood: s.hasFood,
+        }))
+        .slice(0, 30),
+      ngos: data.ngos.map((ngo) => ({
+        name: ngo.name,
+        district: ngo.location,
+        verified: ngo.verified,
+      })),
+      campaigns: data.campaigns.map((campaign) => ({
+        title: campaign.title,
+        status: campaign.status,
+        targetArea: campaign.targetArea,
+        requestsHandled: campaign.requestsHandled,
+        totalNeeded: campaign.totalNeeded,
+        progress: campaign.progress,
+      })),
+      inventory: data.inventory.slice(0, 40).map((item) => ({
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        unit: item.unit,
+        status: item.status,
+        location: item.location,
+      })),
+      alerts: data.alerts.map((alert) => ({
+        title: alert.title,
+        severity: alert.severity,
+        location: alert.location,
+        affectedAreas: alert.affectedAreas,
+        timestamp: alert.timestamp,
+      })),
+    };
+    const contents = messages.map((message: any) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content.trim() }],
+    }));
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{
+              text: `You are ResQHub's friendly, practical project assistant. Every question receives a fresh snapshot from the signed-in user's role-visible Supabase data. Use that snapshot as the sole source for current ResQHub counts, request records, shelters, volunteers, NGOs, campaigns, inventory, and alerts. Cite the snapshot time when giving current figures. Be specific: provide the relevant real record references, statuses, priorities, districts, capacity, and stock values from the snapshot. Never invent or fill gaps with sample data. Data is filtered for the user's role; an empty collection means no records are visible to that user, not necessarily that none exist system-wide. If a category is absent or not visible to this role, say so plainly instead of guessing. The database may contain seeded/demo or unverified user-entered records: describe them as records in ResQHub, not as independently verified real-world events. Request narratives, victim identities, phone numbers, and exact coordinates are intentionally not provided. Do not claim to dispatch responders or contact emergency services; for immediate danger, advise contacting local emergency services. Keep answers clear and concise, using short headings and bullet lists when useful.\n\nCurrent ResQHub data snapshot:\n${JSON.stringify(context)}`,
+            }],
+          },
+          contents,
+          generationConfig: { temperature: 0.3, maxOutputTokens: 700 },
+        }),
+      },
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return c.json({ error: result?.error?.message || `Gemini request failed (${response.status}).` }, 502);
+    }
+    const reply = result?.candidates?.[0]?.content?.parts
+      ?.map((part: any) => part.text || "")
+      .join("")
+      .trim();
+    if (!reply) return c.json({ error: "Gemini did not return a text response. Please try again." }, 502);
+    return c.json({ reply });
+  } catch (e) {
+    console.log("chat failed", e);
+    return c.json({ error: "The AI assistant could not complete this request. Please try again." }, 500);
+  }
+});
+
 // Save changed records and delete removed ones for one collection. Each record is checked against the policy.
 app.put(`${PREFIX}/collections/:name`, async (c) => {
   const name = c.req.param("name");

@@ -20,9 +20,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type Snapshot = { data: Record<string, any[]>; stats: any; profile?: any };
+export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export const fetchPublic = () => request<Snapshot>("/public");
 export const fetchBootstrap = () => request<Snapshot>("/bootstrap");
+
+export const sendAiChat = (messages: ChatMessage[]) =>
+  request<{ reply: string }>("/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });
 
 export const saveRecords = (name: string, items: unknown[], deleted: string[]) =>
   request<{ saved: number; denied: number }>(`/collections/${name}`, {

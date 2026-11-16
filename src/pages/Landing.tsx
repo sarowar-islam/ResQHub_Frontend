@@ -416,7 +416,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                   <Map className="w-3.5 h-3.5 text-teal-400" />
                   <span className="text-xs font-medium text-gray-300">Real-time Operations Map — Bangladesh</span>
                 </div>
-                <MapView markers={mapMarkers()} height="h-72" />
+                <MapView markers={mapMarkers()} height="h-[21.6rem]" />
               </div>
             </div>
           </div>
