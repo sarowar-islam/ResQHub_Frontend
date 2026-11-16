@@ -8,12 +8,13 @@ import {
   LifeBuoy, Activity, Users
 } from "lucide-react";
 import { toast } from "sonner";
-import { HELP_REQUESTS, VOLUNTEERS, NOTIFICATIONS, INITIAL_RESCUE_POLLS } from "../data/mockData";
+
 import type { RescuePoll } from "../data/mockData";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
-import { MAP_MARKERS } from "../data/mockData";
+
 import { useSession } from "../context/SessionContext";
+import { db, usePersistedState } from "../context/DataContext";
 
 type VolunteerPage = "dashboard" | "missions" | "history" | "profile";
 
@@ -46,7 +47,7 @@ const TYPE_COLOR: Record<string, string> = {
   medical: "#dc2626", rescue: "#dc2626", shelter: "#1e3a5f", other: "#6b7280",
 };
 
-const me = VOLUNTEERS[0]; // Karim Ahmed
+const getMe = () => db.volunteers[0];
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 function VolunteerDashboard({
@@ -62,8 +63,8 @@ function VolunteerDashboard({
   onToggleHeart: (pollId: string) => void;
   userHearts: Record<string, boolean>;
 }) {
-  const pending = HELP_REQUESTS.filter(r => r.status === "pending" || r.status === "accepted");
-  const assigned = HELP_REQUESTS.filter(r => r.status === "assigned");
+  const pending = db.helpRequests.filter(r => r.status === "pending" || r.status === "accepted");
+  const assigned = db.helpRequests.filter(r => r.status === "assigned");
 
   return (
     <div className="space-y-6">
@@ -72,8 +73,8 @@ function VolunteerDashboard({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm text-blue-200 mb-1">Welcome back,</p>
-            <h2 className="text-xl font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{me.name}</h2>
-            <p className="text-xs text-blue-300 mt-0.5">Volunteer · {me.location.label}</p>
+            <h2 className="text-xl font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{getMe().name}</h2>
+            <p className="text-xs text-blue-300 mt-0.5">Volunteer · {getMe().location.label}</p>
           </div>
           {/* Availability toggle */}
           <div className="flex flex-col items-end gap-2">
@@ -97,7 +98,7 @@ function VolunteerDashboard({
           {[
             { label: "Missions Today", value: "2" },
             { label: "Hours This Week", value: "18" },
-            { label: "Rating", value: `${me.rating} ★` },
+            { label: "Rating", value: `${getMe().rating} ★` },
           ].map(s => (
             <div key={s.label} className="bg-white/8 rounded-xl px-3 py-2.5 text-center">
               <p className="text-base font-bold text-white">{s.value}</p>
@@ -178,7 +179,7 @@ function VolunteerDashboard({
       {/* Map */}
       <div>
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Nearby Requests Map</h3>
-        <MapView markers={MAP_MARKERS} height="h-64" />
+        <MapView markers={db.mapMarkers} height="h-64" />
       </div>
 
       {/* Nearby requests */}
@@ -210,8 +211,10 @@ function VolunteerDashboard({
 function Missions() {
   const session = useSession();
   const [view, setView] = useState<"list" | "map">("list");
-  const [requests, setRequests] = useState(HELP_REQUESTS.filter(r => r.status === "pending" || r.status === "accepted"));
-  const [selected, setSelected] = useState<typeof HELP_REQUESTS[0] | null>(null);
+  const [allRequests, setAllRequests] = usePersistedState("helpRequests");
+  const [declined, setDeclined] = useState<string[]>([]);
+  const requests = allRequests.filter(r => (r.status === "pending" || r.status === "accepted" || (r.status === "assigned" && r.assignedVolunteer === getMe().name)) && !declined.includes(r.id));
+  const [selected, setSelected] = useState<typeof db.helpRequests[0] | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
   const [report, setReport] = useState("");
 
@@ -222,12 +225,12 @@ function Missions() {
       return;
     }
 
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "assigned" as const } : r));
+    setAllRequests(prev => prev.map(r => r.id === id ? { ...r, status: "assigned" as const, assignedVolunteer: getMe().name, updatedAt: new Date().toISOString() } : r));
     toast.success("Mission accepted! Navigate to location.");
   };
 
   const reject = (id: string) => {
-    setRequests(prev => prev.filter(r => r.id !== id));
+    setDeclined(prev => [...prev, id]);
     toast.info("Mission declined.");
   };
 
@@ -251,7 +254,7 @@ function Missions() {
         </div>
       </div>
 
-      {view === "map" && <MapView markers={MAP_MARKERS.filter(m => m.type === "victim")} height="h-72" />}
+      {view === "map" && <MapView markers={db.mapMarkers.filter(m => m.type === "victim")} height="h-72" />}
 
       {view === "list" && (
         <div className="space-y-4">
@@ -335,7 +338,7 @@ function Missions() {
                           <button
                             onClick={() => {
                               if (!report.trim()) { toast.error("Please write a report."); return; }
-                              setRequests(prev => prev.filter(r => r.id !== req.id));
+                              setAllRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: "completed" as const, updatedAt: new Date().toISOString() } : r));
                               setCompleting(null);
                               toast.success("Mission completed! Great work.");
                             }}
@@ -367,17 +370,17 @@ function Missions() {
 
 // ─── History ──────────────────────────────────────────────────────────────────
 function VolunteerHistory() {
-  const completed = HELP_REQUESTS.filter(r => r.status === "completed");
-  const leaderboard = VOLUNTEERS.sort((a, b) => b.missionsCompleted - a.missionsCompleted);
+  const completed = db.helpRequests.filter(r => r.status === "completed");
+  const leaderboard = [...db.volunteers].sort((a, b) => b.missionsCompleted - a.missionsCompleted);
 
   return (
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Missions Completed", value: me.missionsCompleted, icon: CheckCircle, color: "#16a34a" },
-          { label: "Hours Served", value: me.hoursServed, icon: Clock, color: "#1e3a5f" },
-          { label: "Rating", value: `${me.rating}★`, icon: Star, color: "#f59e0b" },
+          { label: "Missions Completed", value: getMe().missionsCompleted, icon: CheckCircle, color: "#16a34a" },
+          { label: "Hours Served", value: getMe().hoursServed, icon: Clock, color: "#1e3a5f" },
+          { label: "Rating", value: `${getMe().rating}★`, icon: Star, color: "#f59e0b" },
           { label: "District Rank", value: "#4", icon: TrendingUp, color: "#0d9488" },
         ].map(s => {
           const Icon = s.icon;
@@ -395,7 +398,7 @@ function VolunteerHistory() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Badges Earned</h3>
         <div className="flex flex-wrap gap-2">
-          {me.badges.map(badge => (
+          {getMe().badges.map(badge => (
             <div key={badge} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
               <Award className="w-4 h-4 text-amber-500" />
               <span className="text-xs font-semibold text-amber-700">{badge}</span>
@@ -428,7 +431,7 @@ function VolunteerHistory() {
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Volunteer Leaderboard</h3>
         <div className="space-y-2">
           {leaderboard.map((v, i) => (
-            <div key={v.id} className={`flex items-center gap-3 p-3 rounded-xl ${v.id === me.id ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"} transition-colors`}>
+            <div key={v.id} className={`flex items-center gap-3 p-3 rounded-xl ${v.id === getMe().id ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"} transition-colors`}>
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-amber-400 text-white" : i === 1 ? "bg-gray-300 text-gray-700" : i === 2 ? "bg-orange-300 text-white" : "bg-gray-100 text-gray-500"}`}>
                 {i + 1}
               </span>
@@ -436,7 +439,7 @@ function VolunteerHistory() {
                 {v.initials}
               </div>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-[#0f1b2d]">{v.name} {v.id === me.id && <span className="text-[10px] text-blue-500">(You)</span>}</p>
+                <p className="text-xs font-semibold text-[#0f1b2d]">{v.name} {v.id === getMe().id && <span className="text-[10px] text-blue-500">(You)</span>}</p>
                 <p className="text-[10px] text-gray-400">{v.location.district}</p>
               </div>
               <div className="text-right">
@@ -463,22 +466,22 @@ function VolunteerProfile() {
         <div className="flex items-center gap-4 mb-5">
           <div className="w-14 h-14 rounded-full bg-[#0d9488] flex items-center justify-center text-white text-lg font-bold">KA</div>
           <div>
-            <p className="text-base font-bold text-[#0f1b2d]">{me.name}</p>
-            <p className="text-xs text-gray-500">{me.location.label} · Joined {me.joinedAt}</p>
+            <p className="text-base font-bold text-[#0f1b2d]">{getMe().name}</p>
+            <p className="text-xs text-gray-500">{getMe().location.label} · Joined {getMe().joinedAt}</p>
             <div className="flex items-center gap-1 mt-1">
               <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span className="text-xs font-bold text-[#0f1b2d]">{me.rating}</span>
-              <span className="text-[10px] text-gray-400">rating · {me.missionsCompleted} missions</span>
+              <span className="text-xs font-bold text-[#0f1b2d]">{getMe().rating}</span>
+              <span className="text-[10px] text-gray-400">rating · {getMe().missionsCompleted} missions</span>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
           {[
-            { label: "Phone", value: me.phone },
-            { label: "Email", value: me.email },
-            { label: "District", value: me.location.district },
-            { label: "Hours Served", value: `${me.hoursServed} hours` },
+            { label: "Phone", value: getMe().phone },
+            { label: "Email", value: getMe().email },
+            { label: "District", value: getMe().location.district },
+            { label: "Hours Served", value: `${getMe().hoursServed} hours` },
           ].map(f => (
             <div key={f.label}>
               <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">{f.label}</p>
@@ -492,7 +495,7 @@ function VolunteerProfile() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Skills</h3>
         <div className="flex flex-wrap gap-2">
-          {me.skills.map(skill => {
+          {getMe().skills.map(skill => {
             const cfg = SKILL_CONFIG[skill];
             const Icon = cfg.icon;
             return (
@@ -509,7 +512,7 @@ function VolunteerProfile() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Languages</h3>
         <div className="flex flex-wrap gap-2">
-          {me.languages.map(lang => (
+          {getMe().languages.map(lang => (
             <span key={lang} className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full font-medium">{lang}</span>
           ))}
         </div>
@@ -544,8 +547,8 @@ function VolunteerProfile() {
 export default function VolunteerPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [activePage, setActivePage] = useState<VolunteerPage>("dashboard");
   const [isAvailable, setIsAvailable] = useState(true);
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
-  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>(INITIAL_RESCUE_POLLS);
+  const [notifs, setNotifs] = usePersistedState("notifications");
+  const [rescuePolls, setRescuePolls] = usePersistedState("rescuePolls");
   const [userHearts, setUserHearts] = useState<Record<string, boolean>>({});
 
   const handleToggleHeart = (pollId: string) => {

@@ -7,14 +7,13 @@ import {
   Package, Shield, Star, Edit3, Plus, Heart
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  ALERTS, HELP_REQUESTS, SHELTERS, NOTIFICATIONS, INITIAL_RESCUE_POLLS
-} from "../data/mockData";
+
 import type { RescuePoll } from "../data/mockData";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
-import { MAP_MARKERS } from "../data/mockData";
+
 import { useSession } from "../context/SessionContext";
+import { db, usePersistedState, addToCollection } from "../context/DataContext";
 
 type VictimPage = "dashboard" | "request-help" | "track-requests" | "shelters" | "profile";
 
@@ -95,10 +94,10 @@ function VictimDashboard({
           <AlertTriangle className="w-4 h-4 text-red-600" />
         </div>
         <div>
-          <p className="text-sm font-bold text-red-800">{ALERTS[0].title}</p>
-          <p className="text-xs text-red-600 mt-0.5">{ALERTS[0].description.slice(0, 120)}…</p>
+          <p className="text-sm font-bold text-red-800">{db.alerts[0].title}</p>
+          <p className="text-xs text-red-600 mt-0.5">{db.alerts[0].description.slice(0, 120)}…</p>
           <div className="flex gap-1.5 mt-2">
-            {ALERTS[0].affectedAreas.map(a => (
+            {db.alerts[0].affectedAreas.map(a => (
               <span key={a} className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded-full border border-red-200">{a}</span>
             ))}
           </div>
@@ -182,7 +181,7 @@ function VictimDashboard({
           </button>
         </div>
         <div className="space-y-3">
-          {HELP_REQUESTS.filter(r => r.status !== "completed" && r.status !== "cancelled").slice(0, 2).map(req => (
+          {db.helpRequests.filter(r => r.status !== "completed" && r.status !== "cancelled").slice(0, 2).map(req => (
             <div key={req.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
               <div className="flex items-start justify-between mb-2">
                 <div>
@@ -209,7 +208,7 @@ function VictimDashboard({
           </button>
         </div>
         <div className="grid sm:grid-cols-2 gap-3">
-          {SHELTERS.filter(s => s.status !== "closed").slice(0, 2).map(s => {
+          {db.shelters.filter(s => s.status !== "closed").slice(0, 2).map(s => {
             const pct = Math.round((s.currentOccupancy / s.capacity) * 100);
             return (
               <div key={s.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
@@ -258,7 +257,9 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
   const [rescueNote, setRescueNote] = useState("");
   const [emergencyContacts, setEmergencyContacts] = useState<string[]>(["+880 1812345678", "+880 1912345678"]);
   const [newContact, setNewContact] = useState("");
-  const [mapSelectedLocation, setMapSelectedLocation] = useState("Sylhet Sadar, Ward 5");
+  const [mapSelectedLocation, setMapSelectedLocation] = useState("");
+  const [requestPoint, setRequestPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [requestLabel, setRequestLabel] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -297,6 +298,24 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
       setRescueLocation("");
       setRescueNote("");
     } else {
+      if (!requestPoint) {
+        toast.error("Please choose your location on the map.");
+        return;
+      }
+      const now = new Date().toISOString();
+      addToCollection("helpRequests", {
+        id: `req-${Date.now()}`,
+        victimName: session.name || "Anonymous",
+        victimPhone: session.phone || contact,
+        type: type as any,
+        priority: priority as any,
+        status: "pending",
+        description,
+        location: { lat: requestPoint.lat, lng: requestPoint.lng, label: requestLabel, district: "" },
+        createdAt: now,
+        updatedAt: now,
+        timeline: [{ status: "pending", note: "Request submitted", timestamp: now }],
+      }).catch(err => toast.error(`Could not save request: ${err.message}`));
       toast.success("Your help request has been submitted. We'll connect you with a volunteer shortly.");
     }
 
@@ -385,15 +404,24 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
         {/* Location */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
           <label className="block text-sm font-bold text-[#0f1b2d] mb-3">Your Location</label>
-          <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-xl mb-3">
-            <MapPin className="w-4 h-4 text-green-600 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-semibold text-green-800">GPS Location Detected</p>
-              <p className="text-[10px] text-green-600">Sylhet Sadar, Ward 5 — 24.8949°N, 91.8687°E</p>
+          <div className={`flex items-center gap-3 p-3 border rounded-xl mb-3 ${requestPoint ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
+            <MapPin className={`w-4 h-4 flex-shrink-0 ${requestPoint ? "text-green-600" : "text-gray-400"}`} />
+            <div className="min-w-0">
+              <p className={`text-xs font-semibold ${requestPoint ? "text-green-800" : "text-gray-600"}`}>{requestPoint ? "Location selected" : "Choose your location"}</p>
+              <p className={`text-[10px] truncate ${requestPoint ? "text-green-600" : "text-gray-400"}`}>
+                {requestPoint ? `${requestLabel} — ${requestPoint.lat.toFixed(4)}°N, ${requestPoint.lng.toFixed(4)}°E` : "Search, tap the map, or use the locate button"}
+              </p>
             </div>
-            <CheckCircle className="w-4 h-4 text-green-600 ml-auto flex-shrink-0" />
+            {requestPoint && <CheckCircle className="w-4 h-4 text-green-600 ml-auto flex-shrink-0" />}
           </div>
-          <MapView markers={[MAP_MARKERS[0]]} height="h-40" />
+          <MapView
+            markers={[]}
+            height="h-56"
+            onSelectLocation={(label, point) => {
+              setRequestLabel(label);
+              if (point) setRequestPoint(point);
+            }}
+          />
         </div>
 
         {/* Photo upload */}
@@ -449,7 +477,8 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
                   <button
                     type="button"
                     onClick={() => {
-                      const chosen = mapSelectedLocation || "Sylhet Sadar, Ward 5";
+                      const chosen = mapSelectedLocation;
+                      if (!chosen) { toast.error("Pick a point on the map first."); return; }
                       setRescueLocation(chosen);
                       toast.success(`Rescue location set to ${chosen}.`);
                     }}
@@ -460,8 +489,8 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
                 </div>
                 <div className="rounded-xl overflow-hidden border border-gray-200">
                   <MapView
-                    markers={MAP_MARKERS.slice(0, 4)}
-                    height="h-40"
+                    markers={[]}
+                    height="h-56"
                     onSelectLocation={(location) => {
                       setMapSelectedLocation(location);
                       setRescueLocation(location);
@@ -470,7 +499,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-gray-500">
                   <span>Selected point</span>
-                  <span className="font-medium text-[#0f1b2d]">{mapSelectedLocation}</span>
+                  <span className="font-medium text-[#0f1b2d] truncate">{mapSelectedLocation || "None yet"}</span>
                 </div>
               </div>
 
@@ -547,7 +576,7 @@ function TrackRequests() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-[#0f1b2d]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Track Requests</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{HELP_REQUESTS.length} total requests</p>
+          <p className="text-sm text-gray-500 mt-0.5">{db.helpRequests.length} total requests</p>
         </div>
         <div className="flex gap-2">
           {(["all", "pending", "assigned", "completed"] as const).map(f => (
@@ -558,7 +587,7 @@ function TrackRequests() {
         </div>
       </div>
 
-      {HELP_REQUESTS.map(req => {
+      {db.helpRequests.map(req => {
         const isOpen = expanded === req.id;
         return (
           <div key={req.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -651,7 +680,7 @@ function SheltersPage() {
   const [filterMedical, setFilterMedical] = useState(false);
   const [filterFood, setFilterFood] = useState(false);
 
-  const filtered = SHELTERS.filter(s => {
+  const filtered = db.shelters.filter(s => {
     const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.location.district.toLowerCase().includes(search.toLowerCase());
     const matchMedical = !filterMedical || s.hasMedical;
     const matchFood = !filterFood || s.hasFood;
@@ -693,7 +722,7 @@ function SheltersPage() {
       </div>
 
       {/* Map */}
-      <MapView markers={MAP_MARKERS.filter(m => m.type === "shelter")} height="h-56" />
+      <MapView markers={db.mapMarkers.filter(m => m.type === "shelter")} height="h-56" />
 
       {/* Shelter cards */}
       <div className="grid sm:grid-cols-2 gap-4">
@@ -856,12 +885,12 @@ function VictimProfile({ emergencyContacts }: { emergencyContacts: string[] }) {
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [activePage, setActivePage] = useState<VictimPage>("dashboard");
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const [notifs, setNotifs] = usePersistedState("notifications");
   const [emergencyContacts, setEmergencyContacts] = useState<string[]>([
     "+880 1812345678",
     "+880 1912345678",
   ]);
-  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>(INITIAL_RESCUE_POLLS);
+  const [rescuePolls, setRescuePolls] = usePersistedState("rescuePolls");
   const [userHearts, setUserHearts] = useState<Record<string, boolean>>({});
 
   const handleToggleHeart = (pollId: string) => {

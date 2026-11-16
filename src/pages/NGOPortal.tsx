@@ -6,16 +6,14 @@ import {
   ChevronRight, Download, RefreshCw, Shield
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  CAMPAIGNS, SHELTERS, INVENTORY, VOLUNTEERS, NOTIFICATIONS,
-  CHART_DATA, RELIEF_DISTRIBUTION_DATA, HELP_REQUESTS, NGOS
-} from "../data/mockData";
+
 import PortalLayout from "../components/PortalLayout";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 import { useSession } from "../context/SessionContext";
+import { db, usePersistedState } from "../context/DataContext";
 
 type NGOPage = "dashboard" | "campaigns" | "shelters" | "inventory" | "reports" | "volunteers";
 
@@ -30,12 +28,12 @@ const NAV_ITEMS = [
 
 const PIE_COLORS = ["#1e3a5f", "#0d9488", "#f97316", "#16a34a", "#dc2626"];
 
-const me = NGOS[0]; // BRAC
+const getMe = () => db.ngos[0];
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 function NGODashboard() {
-  const activeReqs = HELP_REQUESTS.filter(r => r.status !== "completed" && r.status !== "cancelled");
-  const availableVols = VOLUNTEERS.filter(v => v.isAvailable).length;
+  const activeReqs = db.helpRequests.filter(r => r.status !== "completed" && r.status !== "cancelled");
+  const availableVols = db.volunteers.filter(v => v.isAvailable).length;
 
   return (
     <div className="space-y-6">
@@ -53,10 +51,10 @@ function NGODashboard() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Active Campaigns",     value: me.activeCampaigns.toString(), icon: Flag,        color: "#1e3a5f", change: "+2" },
-          { label: "Volunteers Deployed",  value: `${availableVols}/${me.volunteerCount}`, icon: Users, color: "#0d9488", change: "" },
+          { label: "Active Campaigns",     value: getMe().activeCampaigns.toString(), icon: Flag,        color: "#1e3a5f", change: "+2" },
+          { label: "Volunteers Deployed",  value: `${availableVols}/${getMe().volunteerCount}`, icon: Users, color: "#0d9488", change: "" },
           { label: "Active Requests",      value: activeReqs.length.toString(), icon: AlertTriangle, color: "#f97316", change: `${activeReqs.filter(r=>r.priority==="critical").length} critical` },
-          { label: "Total People Helped",  value: me.totalRelief.toLocaleString() + "+", icon: CheckCircle, color: "#16a34a", change: "+1,200 today" },
+          { label: "Total People Helped",  value: getMe().totalRelief.toLocaleString() + "+", icon: CheckCircle, color: "#16a34a", change: "+1,200 today" },
         ].map(s => {
           const Icon = s.icon;
           return (
@@ -83,7 +81,7 @@ function NGODashboard() {
             <span className="text-[10px] text-gray-400">Last 6 days</span>
           </div>
           <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={CHART_DATA}>
+            <AreaChart data={db.chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} />
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
@@ -99,8 +97,8 @@ function NGODashboard() {
           <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Relief by Type</h3>
           <ResponsiveContainer width="100%" height={160}>
             <PieChart>
-              <Pie data={RELIEF_DISTRIBUTION_DATA} cx="50%" cy="50%" innerRadius={40} outerRadius={65} dataKey="value">
-                {RELIEF_DISTRIBUTION_DATA.map((_, index) => (
+              <Pie data={db.reliefDistribution} cx="50%" cy="50%" innerRadius={40} outerRadius={65} dataKey="value">
+                {db.reliefDistribution.map((_, index) => (
                   <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                 ))}
               </Pie>
@@ -108,7 +106,7 @@ function NGODashboard() {
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-1.5 mt-2">
-            {RELIEF_DISTRIBUTION_DATA.map((d, i) => (
+            {db.reliefDistribution.map((d, i) => (
               <div key={d.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i] }} />
@@ -128,7 +126,7 @@ function NGODashboard() {
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </div>
         <div className="space-y-3">
-          {CAMPAIGNS.filter(c => c.status === "active").map(c => (
+          {db.campaigns.filter(c => c.status === "active").map(c => (
             <div key={c.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-start justify-between mb-2">
                 <div>
@@ -161,7 +159,7 @@ function NGODashboard() {
 function CampaignsPage() {
   const session = useSession();
   const [showCreate, setShowCreate] = useState(false);
-  const [campaigns, setCampaigns] = useState(CAMPAIGNS);
+  const [campaigns, setCampaigns] = usePersistedState("campaigns");
   const [newTitle, setNewTitle] = useState("");
 
   const create = () => {
@@ -275,7 +273,7 @@ function CampaignsPage() {
 
 // ─── Shelter Management ───────────────────────────────────────────────────────
 function ShelterMgmt() {
-  const [shelters, setShelters] = useState(SHELTERS);
+  const [shelters, setShelters] = usePersistedState("shelters");
   const [showAdd, setShowAdd] = useState(false);
 
   return (
@@ -345,7 +343,7 @@ function ShelterMgmt() {
 
 // ─── Inventory ────────────────────────────────────────────────────────────────
 function InventoryPage() {
-  const [inventory, setInventory] = useState(INVENTORY);
+  const [inventory, setInventory] = usePersistedState("inventory");
   const [search, setSearch] = useState("");
 
   const filtered = inventory.filter(i =>
@@ -461,7 +459,7 @@ function ReportsPage() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Daily Volunteer Deployment</h3>
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={CHART_DATA}>
+          <BarChart data={db.chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} />
             <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
@@ -496,7 +494,7 @@ function ReportsPage() {
 // ─── Volunteers ───────────────────────────────────────────────────────────────
 function VolunteersPage() {
   const [search, setSearch] = useState("");
-  const filtered = VOLUNTEERS.filter(v =>
+  const filtered = db.volunteers.filter(v =>
     v.name.toLowerCase().includes(search.toLowerCase()) ||
     v.location.district.toLowerCase().includes(search.toLowerCase())
   );
@@ -506,7 +504,7 @@ function VolunteersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-[#0f1b2d]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Volunteer Management</h2>
-          <p className="text-sm text-gray-500">{VOLUNTEERS.filter(v => v.isAvailable).length} available now · {VOLUNTEERS.length} total</p>
+          <p className="text-sm text-gray-500">{db.volunteers.filter(v => v.isAvailable).length} available now · {db.volunteers.length} total</p>
         </div>
         <button onClick={() => toast.info("Invite volunteer")} className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-xs font-semibold hover:opacity-90" style={{ background: "#1e3a5f" }}>
           <Plus className="w-3.5 h-3.5" /> Invite
@@ -556,7 +554,7 @@ function VolunteersPage() {
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 export default function NGOPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [activePage, setActivePage] = useState<NGOPage>("dashboard");
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const [notifs, setNotifs] = usePersistedState("notifications");
 
   return (
     <PortalLayout

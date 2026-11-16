@@ -7,6 +7,7 @@ import VolunteerPortal from "../pages/VolunteerPortal";
 import NGOPortal from "../pages/NGOPortal";
 import AdminPortal from "../pages/AdminPortal";
 import { SessionProvider, useSession } from "../context/SessionContext";
+import { DataProvider } from "../context/DataContext";
 
 type AppView = "landing" | "login" | "signup" | "victim" | "volunteer" | "ngo" | "admin";
 type AuthMode = "login" | "signup";
@@ -56,8 +57,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <SessionProvider>
-      <AppContent />
-    </SessionProvider>
+    <DataProvider>
+      <SessionProvider>
+        <AppContent />
+      </SessionProvider>
+    </DataProvider>
   );
 }

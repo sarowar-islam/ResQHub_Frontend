@@ -789,3 +789,27 @@ export const AI_RESPONSES: Record<string, string> = {
   "shelter": "**Nearest Available Shelters**\n\n1. **Sylhet Govt. College** — 1.2 km away, 77 spots remaining, medical support available ✓\n2. **RC Relief Center Dhaka** — 4.8 km, 188 spots, full facilities ✓\n3. **Friendship Char Shelter** — 67 km, 113 spots, medical support ✓\n\nRecommendation: Sylhet Govt. College for flood-affected families with medical needs.",
   "generate": "**Relief Operation Summary — June 15, 2024**\n\nResQHub has facilitated 312 active relief operations across 8 districts. 234 volunteers deployed. 48,250 individuals reached. Inventory status: adequate for food, critical for water and first aid. NGO coordination: 6 active organizations. Next 24-hour priority: water purification for Sylhet and Cox's Bazar sectors.",
 };
+
+
+/** Starter data uploaded to Supabase once, when the backend is empty. */
+export const SEED_COLLECTIONS = {
+  alerts: ALERTS,
+  helpRequests: HELP_REQUESTS,
+  volunteers: VOLUNTEERS,
+  shelters: SHELTERS,
+  ngos: NGOS,
+  campaigns: CAMPAIGNS,
+  inventory: INVENTORY,
+  notifications: NOTIFICATIONS,
+  testimonials: TESTIMONIALS,
+  news: NEWS,
+  users: USERS,
+  chartData: CHART_DATA,
+  reliefDistribution: RELIEF_DISTRIBUTION_DATA,
+  mapMarkers: MAP_MARKERS,
+  stats: STATS,
+  emergencyContacts: EMERGENCY_CONTACTS,
+  partnerNames: PARTNER_NAMES,
+  rescuePolls: INITIAL_RESCUE_POLLS,
+  aiResponses: AI_RESPONSES,
+};

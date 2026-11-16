@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Bot, User, Loader2, Zap } from "lucide-react";
-import { AI_RESPONSES } from "../data/mockData";
+import { db } from "../context/DataContext";
 
 interface Message {
   id: string;
@@ -69,10 +69,10 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
     setTimeout(() => {
       const lower = text.toLowerCase();
       let response = "I've received your query. Based on current field data, I recommend coordinating with the nearest volunteer team. Response time is averaging 2.4 hours. Shall I escalate this request to NGO coordinators?";
-      if (lower.includes("summar")) response = AI_RESPONSES["summarize"];
-      else if (lower.includes("prior")) response = AI_RESPONSES["prioritize"];
-      else if (lower.includes("shelter")) response = AI_RESPONSES["shelter"];
-      else if (lower.includes("relief") || lower.includes("generat")) response = AI_RESPONSES["generate"];
+      if (lower.includes("summar")) response = db.aiResponses["summarize"];
+      else if (lower.includes("prior")) response = db.aiResponses["prioritize"];
+      else if (lower.includes("shelter")) response = db.aiResponses["shelter"];
+      else if (lower.includes("relief") || lower.includes("generat")) response = db.aiResponses["generate"];
 
       const aiMsg: Message = { id: (Date.now() + 1).toString(), role: "assistant", content: response, timestamp: new Date() };
       setMessages(prev => [...prev, aiMsg]);

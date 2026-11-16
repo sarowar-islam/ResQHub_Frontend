@@ -6,14 +6,15 @@ import {
   ChevronDown, Filter, Eye, Ban, UserCheck
 } from "lucide-react";
 import { toast } from "sonner";
-import { USERS, CHART_DATA, STATS, NOTIFICATIONS, NGOS, VOLUNTEERS } from "../data/mockData";
+
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
-import { MAP_MARKERS } from "../data/mockData";
+
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
+import { db, usePersistedState } from "../context/DataContext";
 
 type AdminPage = "overview" | "users" | "verification" | "analytics" | "announcements";
 
@@ -37,8 +38,8 @@ function Overview() {
       {/* System stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Users",         value: USERS.length.toString(), icon: Users,         color: "#1e3a5f", sub: "+12 today" },
-          { label: "Active Requests",     value: STATS.activeRequests.toString(), icon: AlertTriangle, color: "#f97316", sub: "47 critical" },
+          { label: "Total Users",         value: db.users.length.toString(), icon: Users,         color: "#1e3a5f", sub: "+12 today" },
+          { label: "Active Requests",     value: db.stats.activeRequests.toString(), icon: AlertTriangle, color: "#f97316", sub: "47 critical" },
           { label: "System Uptime",       value: "99.97%", icon: Activity,       color: "#16a34a", sub: "No incidents" },
           { label: "Avg Response Time",   value: "2.4h",   icon: Clock,          color: "#0d9488", sub: "-12% vs last week" },
         ].map(s => {
@@ -61,9 +62,9 @@ function Overview() {
       {/* Breakdown by role */}
       <div className="grid sm:grid-cols-3 gap-4">
         {[
-          { role: "Victims",    count: USERS.filter(u => u.role === "victim").length,    color: "#dc2626", desc: "Registered individuals" },
-          { role: "Volunteers", count: USERS.filter(u => u.role === "volunteer").length, color: "#0d9488", desc: "Trained responders" },
-          { role: "NGOs",       count: USERS.filter(u => u.role === "ngo").length,       color: "#1e3a5f", desc: "Partner organizations" },
+          { role: "Victims",    count: db.users.filter(u => u.role === "victim").length,    color: "#dc2626", desc: "Registered individuals" },
+          { role: "Volunteers", count: db.users.filter(u => u.role === "volunteer").length, color: "#0d9488", desc: "Trained responders" },
+          { role: "NGOs",       count: db.users.filter(u => u.role === "ngo").length,       color: "#1e3a5f", desc: "Partner organizations" },
         ].map(r => (
           <div key={r.role} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-center">
             <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: r.color + "15" }}>
@@ -106,7 +107,7 @@ function Overview() {
       {/* Map */}
       <div>
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">National Operations Map</h3>
-        <MapView markers={MAP_MARKERS} height="h-72" />
+        <MapView markers={db.mapMarkers} height="h-72" />
       </div>
     </div>
   );
@@ -114,7 +115,7 @@ function Overview() {
 
 // ─── User Management ──────────────────────────────────────────────────────────
 function UserManagement() {
-  const [users, setUsers] = useState(USERS);
+  const [users, setUsers] = usePersistedState("users");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -255,16 +256,17 @@ function UserManagement() {
 
 // ─── Verification Queue ───────────────────────────────────────────────────────
 function VerificationQueue() {
-  const [pendingNGOs, setPendingNGOs] = useState(NGOS.filter(n => !n.verified));
-  const [pendingVols, setPendingVols] = useState(VOLUNTEERS.filter(v => !v.ngoId).slice(0, 2));
+  const [ngos, setNgos] = usePersistedState("ngos");
+  const pendingNGOs = ngos.filter(n => !n.verified);
+  const [pendingVols, setPendingVols] = useState(db.volunteers.filter(v => !v.ngoId).slice(0, 2));
 
   const approveNGO = (id: string) => {
-    setPendingNGOs(prev => prev.filter(n => n.id !== id));
+    setNgos(prev => prev.map(n => n.id === id ? { ...n, verified: true } : n));
     toast.success("NGO approved and notified.");
   };
 
   const rejectNGO = (id: string) => {
-    setPendingNGOs(prev => prev.filter(n => n.id !== id));
+    setNgos(prev => prev.filter(n => n.id !== id));
     toast.info("NGO application rejected.");
   };
 
@@ -371,7 +373,7 @@ function Analytics() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Request Trends</h3>
           <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={CHART_DATA}>
+            <LineChart data={db.chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} />
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
@@ -388,7 +390,7 @@ function Analytics() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Volunteer Activity</h3>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={CHART_DATA}>
+            <BarChart data={db.chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} />
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} />
@@ -404,7 +406,7 @@ function Analytics() {
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Key Performance Indicators</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {[
-            { kpi: "Total Requests",        val: STATS.activeRequests + STATS.completedRequests, change: "+12.4%", up: true },
+            { kpi: "Total Requests",        val: db.stats.activeRequests + db.stats.completedRequests, change: "+12.4%", up: true },
             { kpi: "Completion Rate",       val: "87.3%",   change: "+3.1%", up: true },
             { kpi: "Avg Response Time",     val: "2.4 hrs", change: "-18%",  up: true },
             { kpi: "Volunteer Utilization", val: "94.2%",   change: "+7%",   up: true },
@@ -514,7 +516,7 @@ function Announcements() {
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 export default function AdminPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [activePage, setActivePage] = useState<AdminPage>("overview");
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const [notifs, setNotifs] = usePersistedState("notifications");
 
   return (
     <PortalLayout
