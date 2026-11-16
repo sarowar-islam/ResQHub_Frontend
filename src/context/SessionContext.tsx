@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
-import { supabase, SITE_URL } from "../lib/supabase";
+import { toast } from "sonner";
+import { supabase } from "../lib/supabase";
 import { fetchBootstrap, fetchPublic } from "../lib/api";
 import { applySnapshot, upsertRecord } from "./DataContext";
 import type { AppUser } from "../types";
@@ -44,6 +45,11 @@ interface SessionContextType {
 
 const SessionContext = createContext<SessionContextType | null>(null);
 const REFRESH_MS = 15000;
+type EmailOtpType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
+const isEmailOtpType = (type: string | null): type is EmailOtpType =>
+  type === "signup" || type === "invite" || type === "magiclink" ||
+  type === "recovery" || type === "email_change" || type === "email";
+const authRedirectTo = () => window.location.origin;
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
@@ -57,16 +63,62 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   const loggingOut = useRef(false);
 
-  // Expired/invalid email links come back as #error=...&error_description=...
+  // Supabase may return access tokens, a PKCE code, or a token_hash from an email link.
   useEffect(() => {
-    const raw = window.location.hash.replace(/^#/, "") || window.location.search.replace(/^\?/, "");
-    const params = new URLSearchParams(raw);
+    const params = new URLSearchParams(window.location.search);
+    new URLSearchParams(window.location.hash.replace(/^#/, "")).forEach((value, key) => {
+      if (!params.has(key)) params.set(key, value);
+    });
     const desc = params.get("error_description");
     if (desc) {
-      setAuthNotice(params.get("error_code") === "otp_expired"
+      const message = params.get("error_code") === "otp_expired"
         ? "That email link has expired or was already used. Sign in, or request a new confirmation email."
-        : desc.replace(/\+/g, " "));
+        : desc.replace(/\+/g, " ");
+      setAuthNotice(message);
+      toast.error(message);
       window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+
+    const type = params.get("type");
+    const tokenHash = params.get("token_hash");
+    if (tokenHash) {
+      window.history.replaceState(null, "", window.location.pathname);
+      if (!isEmailOtpType(type)) {
+        const message = "This confirmation link is invalid. Request a new email and try again.";
+        setAuthNotice(message);
+        toast.error(message);
+        return;
+      }
+
+      void supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(({ error }) => {
+        if (error) {
+          setAuthNotice(error.message);
+          toast.error(error.message);
+          return;
+        }
+        if (type === "signup" || type === "email_change") {
+          toast.success("Email verified! Opening your ResQHub portal…");
+        }
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Could not verify the email link.";
+        setAuthNotice(message);
+        toast.error(message);
+      });
+      return;
+    }
+
+    if (type === "signup" || type === "email_change") {
+      void supabase.auth.getSession().then(({ data, error }) => {
+        if (error) {
+          toast.error(error.message);
+          return;
+        }
+        if (data.session?.user.email_confirmed_at) {
+          window.history.replaceState(null, "", window.location.pathname);
+          toast.success("Email verified! Opening your ResQHub portal…");
+        }
+      });
     }
   }, []);
 
@@ -150,7 +202,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       email: input.email,
       password: input.password,
       options: {
-        emailRedirectTo: SITE_URL,
+        emailRedirectTo: authRedirectTo(),
         data: {
           name: input.name, phone: input.phone, role: input.role,
           lat: input.lat, lng: input.lng, locationLabel: input.locationLabel,
@@ -164,12 +216,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resendConfirmation = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: SITE_URL } });
+    const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: authRedirectTo() } });
     if (error) throw new Error(error.message);
   }, []);
 
   const sendPasswordReset = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: authRedirectTo() });
     if (error) throw new Error(error.message);
   }, []);
 

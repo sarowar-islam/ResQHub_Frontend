@@ -2,18 +2,21 @@ import { useState, useEffect } from "react";
 import {
   Shield, Menu, X, AlertTriangle, ArrowRight, Users, Heart,
   Building2, MapPin, Phone, ChevronRight, CheckCircle, Star,
-  Waves, Wind, Mountain, Clock, Globe, Activity, Package,
+  Waves, Wind, Mountain, Clock, Globe, Activity, Package, ArrowLeft,
   LifeBuoy, Bell, Zap, Map, FileText, Bot
 } from "lucide-react";
 
 import MapView from "../components/MapView";
+import { ImageWithFallback } from "../app/components/figma/ImageWithFallback";
 import type { UserRole } from "./Auth";
 import { mapMarkers } from "../lib/derive";
 import { EMERGENCY_CONTACTS } from "../data/emergencyContacts";
 import { db, usePersistedState } from "../context/DataContext";
+import type { Alert, NewsItem } from "../types";
 
 type AppView = string;
 type LandingPage = "Home" | "About" | "Portals" | "Emergency Contacts" | "News";
+type LandingDetail = { type: "news"; id: string } | { type: "alert"; id: string };
 type AuthMode = "login" | "signup";
 
 const NAV_ITEMS: LandingPage[] = ["Home", "About", "Portals", "Emergency Contacts", "News"];
@@ -42,8 +45,17 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
   const [tickerIndex, setTickerIndex] = useState(0);
   const [activePage, setActivePage] = useState<LandingPage>("Home");
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<LandingDetail | null>(null);
 
   const activeAlert = db.alerts[tickerIndex % Math.max(db.alerts.length, 1)];
+  const showDetail = (detail: LandingDetail) => {
+    setSelectedDetail(detail);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const closeDetail = () => {
+    setSelectedDetail(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   useEffect(() => {
     if (isAlertExpanded) return;
@@ -54,6 +66,118 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
   }, [isAlertExpanded]);
 
   const renderPageContent = () => {
+    if (selectedDetail?.type === "news") {
+      const article: NewsItem | undefined = db.news.find(item => item.id === selectedDetail.id);
+      if (!article) {
+        return (
+          <main className="min-h-[60vh] bg-[#f3f7fb] px-4 py-16">
+            <div className="max-w-3xl mx-auto">
+              <button onClick={closeDetail} className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-[#1e3a5f]">
+                <ArrowLeft className="w-4 h-4" /> Back to news
+              </button>
+              <p className="text-gray-600">This news item is no longer available.</p>
+            </div>
+          </main>
+        );
+      }
+
+      return (
+        <main className="min-h-[70vh] bg-[#f3f7fb]">
+          <section className="bg-[#0f1b2d] text-white py-10">
+            <div className="max-w-5xl mx-auto px-4">
+              <button onClick={closeDetail} className="mb-6 inline-flex items-center gap-2 text-sm text-teal-200 hover:text-white">
+                <ArrowLeft className="w-4 h-4" /> Back to {activePage === "News" ? "news" : "home"}
+              </button>
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#5eead4] mb-3">{article.category}</p>
+              <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight">{article.title}</h1>
+              <p className="mt-4 text-sm text-slate-300">{article.source} · {new Date(article.timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+            </div>
+          </section>
+          <article className="max-w-5xl mx-auto px-4 py-10">
+            <ImageWithFallback src={article.image} alt={article.title} className="w-full max-h-[28rem] rounded-2xl object-cover shadow-md" />
+            <div className="max-w-3xl mx-auto py-8">
+              <p className="text-lg leading-relaxed text-slate-700 whitespace-pre-line">{article.summary}</p>
+              <button onClick={closeDetail} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#1e3a5f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f1b2d]">
+                <ArrowLeft className="w-4 h-4" /> Back to {activePage === "News" ? "news" : "home"}
+              </button>
+            </div>
+          </article>
+        </main>
+      );
+    }
+
+    if (selectedDetail?.type === "alert") {
+      const alert: Alert | undefined = db.alerts.find(item => item.id === selectedDetail.id);
+      if (!alert) {
+        return (
+          <main className="min-h-[60vh] bg-[#f3f7fb] px-4 py-16">
+            <div className="max-w-3xl mx-auto">
+              <button onClick={closeDetail} className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-[#1e3a5f]">
+                <ArrowLeft className="w-4 h-4" /> Back to home
+              </button>
+              <p className="text-gray-600">This alert is no longer available.</p>
+            </div>
+          </main>
+        );
+      }
+
+      const AlertIcon = disasterIcons[alert.type];
+      const severity = severityStyles[alert.severity];
+      return (
+        <main className="min-h-[70vh] bg-[#f3f7fb]">
+          <section className="bg-[#0f1b2d] text-white py-10">
+            <div className="max-w-5xl mx-auto px-4">
+              <button onClick={closeDetail} className="mb-6 inline-flex items-center gap-2 text-sm text-teal-200 hover:text-white">
+                <ArrowLeft className="w-4 h-4" /> Back to home
+              </button>
+              <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#5eead4] mb-3">Emergency alert · {alert.type}</p>
+              <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight">{alert.title}</h1>
+            </div>
+          </section>
+          <section className="max-w-5xl mx-auto px-4 py-10">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center gap-3 mb-5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+                  <AlertIcon className="h-5 w-5 text-[#1e3a5f]" />
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${severity.bg}`}>{severity.text}</span>
+                {alert.evacuationOrder && (
+                  <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">EVACUATION ORDER</span>
+                )}
+              </div>
+              <p className="text-base leading-relaxed text-slate-700">{alert.description}</p>
+              <div className="mt-6 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Location</p>
+                  <p className="mt-1 text-sm font-semibold text-[#0f1b2d]">{alert.location}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last updated</p>
+                  <p className="mt-1 text-sm font-semibold text-[#0f1b2d]">{new Date(alert.timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+                </div>
+              </div>
+              <div className="mt-6">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Affected areas</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {alert.affectedAreas.map(area => (
+                    <span key={area} className="rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs text-red-700">{area}</span>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-6 rounded-xl bg-amber-50 p-4 text-sm leading-relaxed text-amber-900">
+                {alert.evacuationOrder
+                  ? "Follow official evacuation instructions and move to a safe location. Contact local emergency services if you need immediate assistance."
+                  : "Monitor updates from local authorities and contact local emergency services if you are in immediate danger."}
+              </p>
+              <button onClick={closeDetail} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#1e3a5f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0f1b2d]">
+                <ArrowLeft className="w-4 h-4" /> Back to home
+              </button>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
     if (activePage === "About") {
       return (
         <main className="bg-[#f3f7fb]">
@@ -180,8 +304,13 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           <section className="max-w-7xl mx-auto px-4 py-16">
             <div className="grid md:grid-cols-3 gap-6">
               {db.news.map(article => (
-                <article key={article.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                  <img src={article.image} alt={article.title} className="h-40 w-full object-cover" />
+                <button
+                  type="button"
+                  key={article.id}
+                  onClick={() => showDetail({ type: "news", id: article.id })}
+                  className="w-full text-left bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <ImageWithFallback src={article.image} alt={article.title} className="h-40 w-full object-cover" />
                   <div className="p-5">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-white rounded-full px-2 py-1" style={{ background: article.category === "Flood" ? "#1e3a5f" : article.category === "Cyclone" ? "#7c3aed" : "#0d9488" }}>{article.category}</span>
@@ -189,8 +318,9 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                     </div>
                     <h3 className="text-base font-bold text-[#0f1b2d] mb-2 leading-snug">{article.title}</h3>
                     <p className="text-sm text-slate-600 leading-relaxed">{article.summary}</p>
+                    <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[#1e3a5f]">Read full story <ArrowRight className="w-3.5 h-3.5" /></span>
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           </section>
@@ -288,7 +418,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
               <button
                 key={item}
                 type="button"
-                onClick={() => setActivePage(item)}
+                onClick={() => { setSelectedDetail(null); setActivePage(item); }}
                 className={`text-sm font-medium transition-colors ${activePage === item ? "text-[#1e3a5f]" : "text-gray-600 hover:text-[#1e3a5f]"}`}
               >
                 {item}
@@ -323,6 +453,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                 key={item}
                 type="button"
                 onClick={() => {
+                  setSelectedDetail(null);
                   setActivePage(item);
                   setMenuOpen(false);
                 }}
@@ -339,7 +470,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
         )}
       </nav>
 
-      {activePage !== "Home" ? renderPageContent() : (
+      {activePage !== "Home" || selectedDetail ? renderPageContent() : (
         <>
           {/* HERO */}
           <section className="relative overflow-hidden" style={{ background: "#0f1b2d", minHeight: "92vh" }}>
@@ -460,10 +591,14 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
             {db.alerts.map(alert => {
               const DisasterIcon = disasterIcons[alert.type];
               const sev = severityStyles[alert.severity];
-              const isExpanded = alert.id === activeAlert.id && isAlertExpanded;
 
               return (
-                <div key={alert.id} className={`bg-white rounded-2xl border p-5 shadow-sm transition-all ${isExpanded ? "border-red-200 shadow-md ring-2 ring-red-100" : "border-gray-100 hover:shadow-md"}`}>
+                <button
+                  type="button"
+                  key={alert.id}
+                  onClick={() => showDetail({ type: "alert", id: alert.id })}
+                  className="w-full text-left bg-white rounded-2xl border border-gray-100 p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1e3a5f]"
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
@@ -477,34 +612,12 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                   </div>
 
                   <h3 className="text-sm font-bold text-[#0f1b2d] mb-1 leading-snug">{alert.title}</h3>
-                  <p className="text-xs text-gray-500 mb-3 leading-relaxed">{isExpanded ? alert.description : `${alert.description.slice(0, 100)}…`}</p>
+                  <p className="text-xs text-gray-500 mb-3 leading-relaxed">{`${alert.description.slice(0, 100)}${alert.description.length > 100 ? "…" : ""}`}</p>
 
                   <div className="flex items-center gap-1.5 text-xs text-gray-400 mb-3">
                     <MapPin className="w-3 h-3" />
                     {alert.location}
                   </div>
-
-                  {isExpanded && (
-                    <div className="space-y-3 rounded-xl bg-red-50 border border-red-100 p-3 mb-3">
-                      <div className="flex items-center justify-between text-[10px] text-gray-600">
-                        <span className="font-semibold text-red-700">Updated</span>
-                        <span>{new Date(alert.timestamp).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">Affected areas</p>
-                        <div className="flex flex-wrap gap-1">
-                          {alert.affectedAreas.map(a => (
-                            <span key={a} className="text-[10px] px-2 py-0.5 bg-white border border-red-100 text-red-700 rounded-full">{a}</span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="text-[10px] text-gray-700">
-                        {alert.evacuationOrder
-                          ? "Mandatory evacuation is in effect for the listed zones. Follow local guidance and move to the nearest safe shelter."
-                          : "Residents should stay alert and monitor official updates while emergency crews assess the situation."}
-                      </div>
-                    </div>
-                  )}
 
                   <div className="flex flex-wrap gap-1 mb-3">
                     {alert.affectedAreas.slice(0, 2).map(a => (
@@ -512,18 +625,10 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                     ))}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (alert.id === activeAlert.id) {
-                        setIsAlertExpanded(prev => !prev);
-                      }
-                    }}
-                    className="w-full text-xs font-semibold text-[#1e3a5f] hover:text-[#0f1b2d] transition-colors"
-                  >
-                    {isExpanded ? "Hide details" : "View details"}
-                  </button>
-                </div>
+                  <span className="flex w-full items-center justify-center gap-1 text-xs font-semibold text-[#1e3a5f] hover:text-[#0f1b2d] transition-colors">
+                    View full details <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
+                </button>
               );
             })}
           </div>
@@ -688,13 +793,23 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
               <p className="text-xs font-bold uppercase tracking-widest text-[#0d9488] mb-1">Disaster News</p>
               <h2 className="text-2xl font-extrabold text-[#0f1b2d]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Latest Updates</h2>
             </div>
-            <button className="text-sm font-medium text-[#1e3a5f] flex items-center gap-1 hover:underline">View all <ChevronRight className="w-4 h-4" /></button>
+            <button
+              onClick={() => { setSelectedDetail(null); setActivePage("News"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="text-sm font-medium text-[#1e3a5f] flex items-center gap-1 hover:underline"
+            >
+              View all <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {db.news.map(article => (
-              <div key={article.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow group cursor-pointer">
+              <button
+                type="button"
+                key={article.id}
+                onClick={() => showDetail({ type: "news", id: article.id })}
+                className="w-full text-left rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow group"
+              >
                 <div className="h-36 bg-gray-100 overflow-hidden">
-                  <img src={article.image} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <ImageWithFallback src={article.image} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -705,8 +820,9 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                   </div>
                   <h3 className="text-sm font-bold text-[#0f1b2d] mb-2 leading-snug group-hover:text-[#1e3a5f] transition-colors">{article.title}</h3>
                   <p className="text-xs text-gray-500 leading-relaxed">{article.summary.slice(0, 90)}…</p>
+                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#1e3a5f]">Read full story <ArrowRight className="w-3 h-3" /></span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
