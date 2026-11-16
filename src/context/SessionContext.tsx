@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import { supabase, SITE_URL } from "../lib/supabase";
 import { fetchBootstrap, fetchPublic } from "../lib/api";
 import { applySnapshot, upsertRecord } from "./DataContext";
 import type { AppUser } from "../types";
@@ -56,6 +56,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [dataVersion, setDataVersion] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const loggingOut = useRef(false);
+
+  // Expired/invalid email links come back as #error=...&error_description=...
+  useEffect(() => {
+    const raw = window.location.hash.replace(/^#/, "") || window.location.search.replace(/^\?/, "");
+    const params = new URLSearchParams(raw);
+    const desc = params.get("error_description");
+    if (desc) {
+      setAuthNotice(params.get("error_code") === "otp_expired"
+        ? "That email link has expired or was already used. Sign in, or request a new confirmation email."
+        : desc.replace(/\+/g, " "));
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
@@ -137,7 +150,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       email: input.email,
       password: input.password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: SITE_URL,
         data: {
           name: input.name, phone: input.phone, role: input.role,
           lat: input.lat, lng: input.lng, locationLabel: input.locationLabel,
@@ -151,12 +164,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resendConfirmation = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: window.location.origin } });
+    const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: SITE_URL } });
     if (error) throw new Error(error.message);
   }, []);
 
   const sendPasswordReset = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: SITE_URL });
     if (error) throw new Error(error.message);
   }, []);
 

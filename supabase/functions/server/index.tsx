@@ -102,7 +102,14 @@ const POLICY: Record<string, Policy> = {
   },
   rescuePolls: {
     read: authed as any,
-    write: (u, old, nw) => !!u && (old ? true : nw.ownerId === u.id),
+    // Anyone signed in may add a heart; only the owner (or an admin) may change anything else.
+    write: (u, old, nw) => {
+      if (!u) return false;
+      if (!old) return nw.ownerId === u.id;
+      if (A(u) || old.ownerId === u.id) return nw.ownerId === old.ownerId;
+      const strip = (r: Rec) => { const { hearts: _h, heartedBy: _b, ...rest } = r; return JSON.stringify(rest); };
+      return strip(old) === strip(nw);
+    },
     del: (u, r) => A(u) || (!!u && r.ownerId === u.id),
   },
   notifications: {
@@ -129,7 +136,14 @@ async function getAuthUser(c: any) {
   return data.user;
 }
 
-const ROLES: Role[] = ["victim", "volunteer", "ngo", "admin"];
+// Self-service signup may only create these roles. Admin is granted out-of-band (see isAdminUser).
+const SIGNUP_ROLES: Role[] = ["victim", "volunteer", "ngo"];
+const ADMIN_EMAILS = (Deno.env.get("ADMIN_EMAILS") || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+// Admin = confirmed email listed in the ADMIN_EMAILS secret, or app_metadata.role === "admin"
+// (app_metadata can only be edited with the service role / dashboard, never by the user).
+const isAdminUser = (user: any) =>
+  !!user.email_confirmed_at &&
+  (user.app_metadata?.role === "admin" || ADMIN_EMAILS.includes(String(user.email || "").toLowerCase()));
 const initialsOf = (name: string) =>
   name.split(/\s+/).filter(Boolean).map((p) => p[0]).join("").slice(0, 2).toUpperCase() || "U";
 
@@ -137,19 +151,17 @@ const initialsOf = (name: string) =>
 async function ensureProfile(user: any): Promise<{ profile?: Rec; error?: string }> {
   const existing = (await kv.get(rk("users", user.id))) as Rec | undefined;
   const emailVerified = !!user.email_confirmed_at;
+  const admin = isAdminUser(user);
   if (existing) {
-    if (existing.emailVerified !== emailVerified) {
-      existing.emailVerified = emailVerified;
-      await kv.set(rk("users", user.id), existing);
-    }
+    let changed = false;
+    if (existing.emailVerified !== emailVerified) { existing.emailVerified = emailVerified; changed = true; }
+    if (admin && existing.role !== "admin") { existing.role = "admin"; existing.verified = true; existing.status = "active"; changed = true; }
+    if (changed) await kv.set(rk("users", user.id), existing);
     return { profile: existing };
   }
 
   const meta = user.user_metadata ?? {};
-  const role: Role = ROLES.includes(meta.role) ? meta.role : "victim";
-  if (role === "admin" && (await list("users")).some((u) => u.role === "admin")) {
-    return { error: "Admin accounts are invite-only. An administrator already exists." };
-  }
+  const role: Role = admin ? "admin" : SIGNUP_ROLES.includes(meta.role) ? meta.role : "victim";
 
   const name = String(meta.name || user.email?.split("@")[0] || "User").trim();
   const now = new Date().toISOString();
@@ -258,6 +270,7 @@ app.put(`${PREFIX}/collections/:name`, async (c) => {
     if (error || !profile) return c.json({ error }, 403);
     if (profile.status === "suspended") return c.json({ error: "This account has been suspended." }, 403);
     const viewer: Viewer = { id: user.id, role: profile.role };
+    if (!user.email_confirmed_at) return c.json({ error: "Please confirm your email before making changes." }, 403);
 
     const body = await c.req.json();
     const items: Rec[] = Array.isArray(body?.items) ? body.items : [];

@@ -70,11 +70,11 @@ function AppContent() {
         {view === "landing" && <Landing onNavigate={navigate} />}
         {view === "login" && <Auth initialMode={authMode === "signup" ? "signup" : "login"} defaultRole={authRole} onNavigate={navigate} />}
         {view === "signup" && <Auth initialMode={authMode === "login" ? "login" : "signup"} defaultRole={authRole} onNavigate={navigate} />}
-        {session.profile && view === "victim" && <VictimPortal onNavigate={navigate} />}
-        {session.profile && view === "volunteer" && <VolunteerPortal onNavigate={navigate} />}
-        {session.profile && view === "ngo" && <NGOPortal onNavigate={navigate} />}
-        {session.profile && view === "admin" && <AdminPortal onNavigate={navigate} />}
-        {!session.profile && ["victim", "volunteer", "ngo", "admin"].includes(view) && <Auth initialMode="login" defaultRole="victim" onNavigate={navigate} />}
+        {session.profile?.role === "victim" && view === "victim" && <VictimPortal onNavigate={navigate} />}
+        {session.profile?.role === "volunteer" && view === "volunteer" && <VolunteerPortal onNavigate={navigate} />}
+        {session.profile?.role === "ngo" && view === "ngo" && <NGOPortal onNavigate={navigate} />}
+        {session.profile?.role === "admin" && view === "admin" && <AdminPortal onNavigate={navigate} />}
+        {["victim", "volunteer", "ngo", "admin"].includes(view) && session.profile?.role !== view && <Auth initialMode="login" defaultRole="victim" onNavigate={navigate} />}
       </>
     );
   }

@@ -285,8 +285,8 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
               {mode === "signup" && (
                 <div className="mb-5">
                   <label className="block text-xs font-semibold text-[#0f1b2d] mb-2">I am registering as a…</label>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {(Object.entries(roleConfig) as [UserRole, typeof roleConfig.victim][]).map(([r, cfg]) => {
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {(Object.entries(roleConfig) as [UserRole, typeof roleConfig.victim][]).filter(([r]) => r !== "admin").map(([r, cfg]) => {
                       const Icon = cfg.icon;
                       const isActive = role === r;
                       return (
