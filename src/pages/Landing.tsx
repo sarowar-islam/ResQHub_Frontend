@@ -5,12 +5,12 @@ import {
   Waves, Wind, Mountain, Clock, Globe, Activity, Package,
   LifeBuoy, Bell, Zap, Map, FileText, Bot
 } from "lucide-react";
-import {
-  ALERTS, STATS, TESTIMONIALS, NEWS, EMERGENCY_CONTACTS,
-  PARTNER_NAMES, MAP_MARKERS
-} from "../data/mockData";
+
 import MapView from "../components/MapView";
 import type { UserRole } from "./Auth";
+import { mapMarkers } from "../lib/derive";
+import { EMERGENCY_CONTACTS } from "../data/emergencyContacts";
+import { db, usePersistedState } from "../context/DataContext";
 
 type AppView = string;
 type LandingPage = "Home" | "About" | "Portals" | "Emergency Contacts" | "News";
@@ -43,12 +43,13 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
   const [activePage, setActivePage] = useState<LandingPage>("Home");
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
 
-  const activeAlert = ALERTS[tickerIndex];
+  const activeAlert = db.alerts[tickerIndex % Math.max(db.alerts.length, 1)];
 
   useEffect(() => {
     if (isAlertExpanded) return;
 
-    const t = setInterval(() => setTickerIndex(i => (i + 1) % ALERTS.length), 4000);
+    if (db.alerts.length < 2) return;
+    const t = setInterval(() => setTickerIndex(i => (i + 1) % db.alerts.length), 4000);
     return () => clearInterval(t);
   }, [isAlertExpanded]);
 
@@ -80,10 +81,10 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
               {[
-                { label: "People reached", value: "1.2M+" },
-                { label: "Volunteer response time", value: "12 mins" },
-                { label: "Operational districts", value: "64" },
-                { label: "Shelters coordinated", value: "234" }
+                { label: "People helped", value: formatNumber(db.stats.victimsHelped) },
+                { label: "Active requests", value: formatNumber(db.stats.activeRequests) },
+                { label: "Registered volunteers", value: formatNumber(db.stats.registeredVolunteers) },
+                { label: "Shelters coordinated", value: formatNumber(db.stats.activeShelters) }
               ].map(item => (
                 <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
                   <p className="text-3xl font-extrabold text-[#0f1b2d] mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
@@ -178,7 +179,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
 
           <section className="max-w-7xl mx-auto px-4 py-16">
             <div className="grid md:grid-cols-3 gap-6">
-              {NEWS.map(article => (
+              {db.news.map(article => (
                 <article key={article.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                   <img src={article.image} alt={article.title} className="h-40 w-full object-cover" />
                   <div className="p-5">
@@ -203,6 +204,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
   return (
     <div className="min-h-screen" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Emergency Alert Bar */}
+      {activeAlert && (
       <div className="bg-red-600 text-white py-2 px-4 overflow-hidden">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full flex-shrink-0">
@@ -219,8 +221,9 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </button>
         </div>
       </div>
+      )}
 
-      {isAlertExpanded && (
+      {activeAlert && isAlertExpanded && (
         <div className="bg-[#fef2f2] border-b border-red-200 px-4 py-4">
           <div className="max-w-7xl mx-auto grid lg:grid-cols-[1.3fr_0.7fr] gap-5">
             <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
@@ -359,7 +362,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
             <div>
               <div className="inline-flex items-center gap-2 bg-white/8 border border-white/10 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-medium text-emerald-300">{STATS.activeRequests} active emergencies being handled</span>
+                <span className="text-xs font-medium text-emerald-300">{db.stats.activeRequests} active emergencies being handled</span>
               </div>
 
               <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 rounded-full px-3.5 py-1.5 mb-5 text-sm font-medium text-teal-200">
@@ -413,7 +416,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                   <Map className="w-3.5 h-3.5 text-teal-400" />
                   <span className="text-xs font-medium text-gray-300">Real-time Operations Map — Bangladesh</span>
                 </div>
-                <MapView markers={MAP_MARKERS} height="h-72" />
+                <MapView markers={mapMarkers()} height="h-72" />
               </div>
             </div>
           </div>
@@ -425,10 +428,10 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { label: "Victims Helped", value: formatNumber(STATS.victimsHelped), icon: Heart, color: "#dc2626", bg: "bg-red-50" },
-              { label: "Registered Volunteers", value: formatNumber(STATS.registeredVolunteers), icon: Users, color: "#0d9488", bg: "bg-teal-50" },
-              { label: "Partner NGOs", value: STATS.partnerNGOs.toString(), icon: Building2, color: "#1e3a5f", bg: "bg-blue-50" },
-              { label: "Active Shelters", value: STATS.activeShelters.toString(), icon: MapPin, color: "#f97316", bg: "bg-orange-50" },
+              { label: "Victims Helped", value: formatNumber(db.stats.victimsHelped), icon: Heart, color: "#dc2626", bg: "bg-red-50" },
+              { label: "Registered Volunteers", value: formatNumber(db.stats.registeredVolunteers), icon: Users, color: "#0d9488", bg: "bg-teal-50" },
+              { label: "Partner NGOs", value: db.stats.partnerNGOs.toString(), icon: Building2, color: "#1e3a5f", bg: "bg-blue-50" },
+              { label: "Active Shelters", value: db.stats.activeShelters.toString(), icon: MapPin, color: "#f97316", bg: "bg-orange-50" },
             ].map(stat => {
               const Icon = stat.icon;
               return (
@@ -446,14 +449,15 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
       </section>
 
       {/* Current Alerts */}
-      <section className="py-10" style={{ background: "#f0f4f8" }}>
+      {db.alerts.length > 0 && activeAlert && (
+<section className="py-10" style={{ background: "#f0f4f8" }}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-4">
             <Bell className="w-4 h-4 text-red-500" />
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">Active Emergency Alerts</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-4">
-            {ALERTS.map(alert => {
+            {db.alerts.map(alert => {
               const DisasterIcon = disasterIcons[alert.type];
               const sev = severityStyles[alert.severity];
               const isExpanded = alert.id === activeAlert.id && isAlertExpanded;
@@ -525,6 +529,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* How It Works */}
       <section className="py-16 bg-white">
@@ -593,7 +598,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
             {[
               { icon: Activity, title: "Real-time Tracking", desc: "Every request, volunteer, and delivery tracked live. No black boxes.", color: "#1e3a5f" },
               { icon: Zap, title: "Smart Matching", desc: "AI matches victims with the nearest available volunteers based on skills and location.", color: "#0d9488" },
-              { icon: MapPin, title: "Shelter Network", desc: "234 shelters across Bangladesh with live capacity, facilities, and distance data.", color: "#f97316" },
+              { icon: MapPin, title: "Shelter Network", desc: `${db.stats.activeShelters} shelters across Bangladesh with live capacity, facilities, and distance data.`, color: "#f97316" },
               { icon: Bot, title: "AI Emergency Assistant", desc: "Summarize reports, prioritize requests, and generate insights — all AI-powered.", color: "#7c3aed" },
               { icon: Package, title: "Inventory Management", desc: "Track food, water, medicine, and supplies across all warehouses in real time.", color: "#16a34a" },
               { icon: Globe, title: "Multi-district Coverage", desc: "Deployed across all 64 districts with offline-ready capabilities for remote areas.", color: "#dc2626" },
@@ -636,20 +641,21 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                 ))}
               </div>
             </div>
-            <MapView markers={MAP_MARKERS} height="h-96" />
+            <MapView markers={mapMarkers()} height="h-96" />
           </div>
         </div>
       </section>
 
       {/* Testimonials */}
-      <section className="py-16" style={{ background: "#f0f4f8" }}>
+      {db.testimonials.length > 0 && (
+<section className="py-16" style={{ background: "#f0f4f8" }}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-10">
             <p className="text-xs font-bold uppercase tracking-widest text-[#0d9488] mb-3">Testimonials</p>
             <h2 className="text-3xl font-extrabold text-[#0f1b2d]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>From the people we serve.</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map(t => (
+            {db.testimonials.map(t => (
               <div key={t.id} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm flex flex-col">
                 <div className="flex gap-0.5 mb-4">
                   {Array.from({ length: t.rating }).map((_, i) => (
@@ -671,9 +677,11 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* Latest News */}
-      <section className="py-16 bg-white">
+      {db.news.length > 0 && (
+<section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -683,7 +691,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
             <button className="text-sm font-medium text-[#1e3a5f] flex items-center gap-1 hover:underline">View all <ChevronRight className="w-4 h-4" /></button>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            {NEWS.map(article => (
+            {db.news.map(article => (
               <div key={article.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-shadow group cursor-pointer">
                 <div className="h-36 bg-gray-100 overflow-hidden">
                   <img src={article.image} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -703,6 +711,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* Emergency Contacts */}
       <section className="py-10" style={{ background: "#1e3a5f" }}>
@@ -728,11 +737,12 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
       </section>
 
       {/* Partners */}
-      <section className="py-10 bg-white border-t border-gray-100">
+      {db.ngos.some(n => n.verified) && (
+<section className="py-10 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-gray-400 mb-6">Trusted Partner Organizations</p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            {PARTNER_NAMES.map(name => (
+            {db.ngos.filter(n => n.verified).map(n => n.name).map(name => (
               <div key={name} className="px-5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-semibold text-gray-500 hover:border-gray-200 hover:text-gray-700 transition-colors cursor-pointer">
                 {name}
               </div>
@@ -740,12 +750,13 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* CTA Banner */}
       <section className="py-14" style={{ background: "#0d9488" }}>
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-extrabold text-white mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Be the difference in someone's survival.</h2>
-          <p className="text-teal-100 mb-7 text-sm">Join 12,000+ volunteers and 89 NGOs already using ResQHub to coordinate fast, dependable response.</p>
+          <p className="text-teal-100 mb-7 text-sm">Join the volunteers and NGOs already using ResQHub to coordinate fast, dependable response.</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button onClick={() => onNavigate("victim")} className="px-7 py-3.5 bg-white text-[#0d9488] font-bold rounded-xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
               <LifeBuoy className="w-4 h-4" /> I Need Help

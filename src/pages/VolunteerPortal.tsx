@@ -8,12 +8,16 @@ import {
   LifeBuoy, Activity, Users
 } from "lucide-react";
 import { toast } from "sonner";
-import { HELP_REQUESTS, VOLUNTEERS, NOTIFICATIONS, INITIAL_RESCUE_POLLS } from "../data/mockData";
-import type { RescuePoll } from "../data/mockData";
+
+import type { RescuePoll } from "../types";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
-import { MAP_MARKERS } from "../data/mockData";
+
 import { useSession } from "../context/SessionContext";
+import { mapMarkers, initialsOf, timeAgo } from "../lib/derive";
+import { useUserLocation } from "../context/LocationContext";
+import { db, useDbRevision, usePersistedState, patchRecord, addToCollection } from "../context/DataContext";
+import type { Volunteer } from "../types";
 
 type VolunteerPage = "dashboard" | "missions" | "history" | "profile";
 
@@ -46,7 +50,17 @@ const TYPE_COLOR: Record<string, string> = {
   medical: "#dc2626", rescue: "#dc2626", shelter: "#1e3a5f", other: "#6b7280",
 };
 
-const me = VOLUNTEERS[0]; // Karim Ahmed
+let meId = "";
+const directionsUrl = (loc: { lat: number; lng: number }) => `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`;
+const getMe = (): Volunteer =>
+  db.volunteers.find(v => v.id === meId) ?? {
+    id: meId, name: "", initials: "", phone: "", email: "", skills: [], location: { lat: 0, lng: 0, label: "Location not set", district: "" },
+    isAvailable: true, missionsCompleted: 0, hoursServed: 0, rating: 0, joinedAt: "", badges: [], languages: [],
+  };
+const notifyVictim = (req: { ownerId?: string; id: string }, title: string, message: string) => {
+  if (!req.ownerId) return;
+  addToCollection("notifications", { id: `n-${Date.now()}-${req.id}`, userId: req.ownerId, type: "mission", title, message, timestamp: new Date().toISOString(), read: false });
+};
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 function VolunteerDashboard({
@@ -62,8 +76,10 @@ function VolunteerDashboard({
   onToggleHeart: (pollId: string) => void;
   userHearts: Record<string, boolean>;
 }) {
-  const pending = HELP_REQUESTS.filter(r => r.status === "pending" || r.status === "accepted");
-  const assigned = HELP_REQUESTS.filter(r => r.status === "assigned");
+  const pending = db.helpRequests.filter(r => r.status === "pending" || r.status === "accepted");
+  const assigned = db.helpRequests.filter(r => r.status === "assigned" && r.assignedVolunteerId === meId);
+  const today = new Date().toISOString().slice(0, 10);
+  const missionsToday = db.helpRequests.filter(r => r.assignedVolunteerId === meId && r.updatedAt?.slice(0, 10) === today).length;
 
   return (
     <div className="space-y-6">
@@ -72,8 +88,8 @@ function VolunteerDashboard({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm text-blue-200 mb-1">Welcome back,</p>
-            <h2 className="text-xl font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{me.name}</h2>
-            <p className="text-xs text-blue-300 mt-0.5">Volunteer · {me.location.label}</p>
+            <h2 className="text-xl font-bold" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{getMe().name}</h2>
+            <p className="text-xs text-blue-300 mt-0.5">Volunteer · {getMe().location.label}</p>
           </div>
           {/* Availability toggle */}
           <div className="flex flex-col items-end gap-2">
@@ -95,9 +111,9 @@ function VolunteerDashboard({
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-3 mt-5">
           {[
-            { label: "Missions Today", value: "2" },
-            { label: "Hours This Week", value: "18" },
-            { label: "Rating", value: `${me.rating} ★` },
+            { label: "Missions Today", value: String(missionsToday) },
+            { label: "Missions Completed", value: String(getMe().missionsCompleted) },
+            { label: "Rating", value: getMe().rating ? `${getMe().rating} ★` : "New" },
           ].map(s => (
             <div key={s.label} className="bg-white/8 rounded-xl px-3 py-2.5 text-center">
               <p className="text-base font-bold text-white">{s.value}</p>
@@ -124,7 +140,7 @@ function VolunteerDashboard({
                 <p className="text-xs text-amber-700 mb-2">{req.description.slice(0, 80)}…</p>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-amber-600 flex items-center gap-1"><MapPin className="w-3 h-3" />{req.location.label}</span>
-                  <button onClick={() => toast.success("Navigation started!")} className="text-xs font-semibold text-white px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 flex items-center gap-1">
+                  <button onClick={() => window.open(directionsUrl(req.location), "_blank", "noopener")} className="text-xs font-semibold text-white px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 flex items-center gap-1">
                     <Navigation className="w-3 h-3" /> Navigate
                   </button>
                 </div>
@@ -154,7 +170,7 @@ function VolunteerDashboard({
                       <p className="text-xs font-bold text-[#0f1b2d]">{poll.victimName}</p>
                       <p className="text-[10px] text-gray-500 mt-0.5">{poll.location}</p>
                     </div>
-                    <span className="text-[10px] text-gray-500">{poll.time}</span>
+                    <span className="text-[10px] text-gray-500">{poll.createdAt ? timeAgo(poll.createdAt) : poll.time}</span>
                   </div>
                   <p className="text-xs text-gray-600 mb-3 leading-relaxed">{poll.note}</p>
                   <div className="flex items-center justify-between gap-2">
@@ -178,13 +194,14 @@ function VolunteerDashboard({
       {/* Map */}
       <div>
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Nearby Requests Map</h3>
-        <MapView markers={MAP_MARKERS} height="h-64" />
+        <MapView markers={mapMarkers()} height="h-64" />
       </div>
 
       {/* Nearby requests */}
       <div>
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Nearby Emergency Requests ({pending.length})</h3>
         <div className="space-y-3">
+          {pending.length === 0 && <p className="text-xs text-gray-400 bg-white rounded-2xl border border-gray-100 p-4">No open requests right now.</p>}
           {pending.slice(0, 3).map(req => (
             <div key={req.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: (TYPE_COLOR[req.type] || "#6b7280") + "20" }}>
@@ -210,8 +227,10 @@ function VolunteerDashboard({
 function Missions() {
   const session = useSession();
   const [view, setView] = useState<"list" | "map">("list");
-  const [requests, setRequests] = useState(HELP_REQUESTS.filter(r => r.status === "pending" || r.status === "accepted"));
-  const [selected, setSelected] = useState<typeof HELP_REQUESTS[0] | null>(null);
+  const [allRequests, setAllRequests] = usePersistedState("helpRequests");
+  const [declined, setDeclined] = useState<string[]>([]);
+  const requests = allRequests.filter(r => (r.status === "pending" || r.status === "accepted" || (r.status === "assigned" && r.assignedVolunteerId === meId)) && !declined.includes(r.id));
+  const [selected, setSelected] = useState<typeof db.helpRequests[0] | null>(null);
   const [completing, setCompleting] = useState<string | null>(null);
   const [report, setReport] = useState("");
 
@@ -222,12 +241,18 @@ function Missions() {
       return;
     }
 
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: "assigned" as const } : r));
+    const req = allRequests.find(r => r.id === id);
+    const now = new Date().toISOString();
+    setAllRequests(prev => prev.map(r => r.id === id ? {
+      ...r, status: "assigned" as const, assignedVolunteer: getMe().name, assignedVolunteerId: meId, updatedAt: now,
+      timeline: [...r.timeline, { status: "assigned" as const, timestamp: now, note: `Accepted by ${getMe().name}`, actor: getMe().name }],
+    } : r));
+    if (req) notifyVictim(req, "A volunteer is on the way", `${getMe().name} accepted your ${req.type} request.`);
     toast.success("Mission accepted! Navigate to location.");
   };
 
   const reject = (id: string) => {
-    setRequests(prev => prev.filter(r => r.id !== id));
+    setDeclined(prev => [...prev, id]);
     toast.info("Mission declined.");
   };
 
@@ -251,7 +276,7 @@ function Missions() {
         </div>
       </div>
 
-      {view === "map" && <MapView markers={MAP_MARKERS.filter(m => m.type === "victim")} height="h-72" />}
+      {view === "map" && <MapView markers={mapMarkers().filter(m => m.type === "victim")} height="h-72" />}
 
       {view === "list" && (
         <div className="space-y-4">
@@ -309,10 +334,10 @@ function Missions() {
                   ) : (
                     <div className="space-y-2">
                       <div className="flex gap-2">
-                        <button onClick={() => toast.success("Navigation started.")} className="flex-1 py-2.5 rounded-xl text-white font-semibold text-xs hover:opacity-90 flex items-center justify-center gap-1.5" style={{ background: "#1e3a5f" }}>
+                        <button onClick={() => window.open(directionsUrl(req.location), "_blank", "noopener")} className="flex-1 py-2.5 rounded-xl text-white font-semibold text-xs hover:opacity-90 flex items-center justify-center gap-1.5" style={{ background: "#1e3a5f" }}>
                           <Navigation className="w-3.5 h-3.5" /> Navigate
                         </button>
-                        <button onClick={() => toast.success(`Calling ${req.victimName}…`)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200 flex items-center justify-center gap-1.5">
+                        <button onClick={() => { if (req.victimPhone) window.location.href = `tel:${req.victimPhone}`; else toast.info("No phone number on file."); }} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200 flex items-center justify-center gap-1.5">
                           <Phone className="w-3.5 h-3.5" /> Call Victim
                         </button>
                       </div>
@@ -335,7 +360,14 @@ function Missions() {
                           <button
                             onClick={() => {
                               if (!report.trim()) { toast.error("Please write a report."); return; }
-                              setRequests(prev => prev.filter(r => r.id !== req.id));
+                              const now = new Date().toISOString();
+                              setAllRequests(prev => prev.map(r => r.id === req.id ? {
+                                ...r, status: "completed" as const, updatedAt: now,
+                                timeline: [...r.timeline, { status: "completed" as const, timestamp: now, note: report.trim(), actor: getMe().name }],
+                              } : r));
+                              patchRecord("volunteers", meId, { missionsCompleted: getMe().missionsCompleted + 1 });
+                              notifyVictim(req, "Your request was completed", `${getMe().name} marked your ${req.type} request as completed.`);
+                              setReport("");
                               setCompleting(null);
                               toast.success("Mission completed! Great work.");
                             }}
@@ -367,18 +399,18 @@ function Missions() {
 
 // ─── History ──────────────────────────────────────────────────────────────────
 function VolunteerHistory() {
-  const completed = HELP_REQUESTS.filter(r => r.status === "completed");
-  const leaderboard = VOLUNTEERS.sort((a, b) => b.missionsCompleted - a.missionsCompleted);
+  const completed = db.helpRequests.filter(r => r.status === "completed" && r.assignedVolunteerId === meId);
+  const leaderboard = [...db.volunteers].sort((a, b) => b.missionsCompleted - a.missionsCompleted);
 
   return (
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Missions Completed", value: me.missionsCompleted, icon: CheckCircle, color: "#16a34a" },
-          { label: "Hours Served", value: me.hoursServed, icon: Clock, color: "#1e3a5f" },
-          { label: "Rating", value: `${me.rating}★`, icon: Star, color: "#f59e0b" },
-          { label: "District Rank", value: "#4", icon: TrendingUp, color: "#0d9488" },
+          { label: "Missions Completed", value: getMe().missionsCompleted, icon: CheckCircle, color: "#16a34a" },
+          { label: "Completed (logged)", value: completed.length, icon: Clock, color: "#1e3a5f" },
+          { label: "Rating", value: getMe().rating ? `${getMe().rating}★` : "New", icon: Star, color: "#f59e0b" },
+          { label: "Leaderboard Rank", value: `#${leaderboard.findIndex(v => v.id === meId) + 1}`, icon: TrendingUp, color: "#0d9488" },
         ].map(s => {
           const Icon = s.icon;
           return (
@@ -395,7 +427,8 @@ function VolunteerHistory() {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Badges Earned</h3>
         <div className="flex flex-wrap gap-2">
-          {me.badges.map(badge => (
+          {getMe().badges.length === 0 && <p className="text-xs text-gray-400">No badges yet. Complete missions to earn them.</p>}
+          {getMe().badges.map(badge => (
             <div key={badge} className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
               <Award className="w-4 h-4 text-amber-500" />
               <span className="text-xs font-semibold text-amber-700">{badge}</span>
@@ -408,6 +441,7 @@ function VolunteerHistory() {
       <div>
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Completed Missions</h3>
         <div className="space-y-3">
+          {completed.length === 0 && <p className="text-xs text-gray-400 bg-white rounded-2xl border border-gray-100 p-4">No completed missions yet.</p>}
           {completed.map(req => (
             <div key={req.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
               <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
@@ -428,15 +462,15 @@ function VolunteerHistory() {
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-4">Volunteer Leaderboard</h3>
         <div className="space-y-2">
           {leaderboard.map((v, i) => (
-            <div key={v.id} className={`flex items-center gap-3 p-3 rounded-xl ${v.id === me.id ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"} transition-colors`}>
+            <div key={v.id} className={`flex items-center gap-3 p-3 rounded-xl ${v.id === getMe().id ? "bg-blue-50 border border-blue-200" : "hover:bg-gray-50"} transition-colors`}>
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-amber-400 text-white" : i === 1 ? "bg-gray-300 text-gray-700" : i === 2 ? "bg-orange-300 text-white" : "bg-gray-100 text-gray-500"}`}>
                 {i + 1}
               </span>
               <div className="w-7 h-7 rounded-full bg-[#1e3a5f] flex items-center justify-center text-white text-[10px] font-bold">
-                {v.initials}
+                {v.initials || initialsOf(v.name)}
               </div>
               <div className="flex-1">
-                <p className="text-xs font-semibold text-[#0f1b2d]">{v.name} {v.id === me.id && <span className="text-[10px] text-blue-500">(You)</span>}</p>
+                <p className="text-xs font-semibold text-[#0f1b2d]">{v.name} {v.id === getMe().id && <span className="text-[10px] text-blue-500">(You)</span>}</p>
                 <p className="text-[10px] text-gray-400">{v.location.district}</p>
               </div>
               <div className="text-right">
@@ -445,7 +479,7 @@ function VolunteerHistory() {
               </div>
               <div className="flex items-center gap-0.5">
                 <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                <span className="text-xs font-medium text-[#0f1b2d]">{v.rating}</span>
+                <span className="text-xs font-medium text-[#0f1b2d]">{v.rating || "New"}</span>
               </div>
             </div>
           ))}
@@ -457,17 +491,37 @@ function VolunteerHistory() {
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 function VolunteerProfile() {
+  const { location: userLoc } = useUserLocation();
+  const me = getMe();
+  const [langDraft, setLangDraft] = useState("");
+
+  const toggleSkill = (skill: keyof typeof SKILL_CONFIG) => {
+    const has = me.skills.includes(skill);
+    patchRecord("volunteers", meId, { skills: has ? me.skills.filter(s => s !== skill) : [...me.skills, skill] });
+  };
+  const addLanguage = () => {
+    const v = langDraft.trim();
+    if (!v || me.languages.includes(v)) return;
+    patchRecord("volunteers", meId, { languages: [...me.languages, v] });
+    setLangDraft("");
+  };
+  const updateLocation = () => {
+    if (!userLoc) { toast.error("Allow location access in your browser first."); return; }
+    patchRecord("volunteers", meId, { location: { lat: userLoc.lat, lng: userLoc.lng, label: userLoc.label, district: me.location.district } });
+    toast.success("Location updated.");
+  };
+
   return (
     <div className="max-w-xl mx-auto space-y-5">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-14 h-14 rounded-full bg-[#0d9488] flex items-center justify-center text-white text-lg font-bold">KA</div>
+          <div className="w-14 h-14 rounded-full bg-[#0d9488] flex items-center justify-center text-white text-lg font-bold">{initialsOf(me.name)}</div>
           <div>
             <p className="text-base font-bold text-[#0f1b2d]">{me.name}</p>
             <p className="text-xs text-gray-500">{me.location.label} · Joined {me.joinedAt}</p>
             <div className="flex items-center gap-1 mt-1">
               <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span className="text-xs font-bold text-[#0f1b2d]">{me.rating}</span>
+              <span className="text-xs font-bold text-[#0f1b2d]">{me.rating || "New"}</span>
               <span className="text-[10px] text-gray-400">rating · {me.missionsCompleted} missions</span>
             </div>
           </div>
@@ -475,31 +529,36 @@ function VolunteerProfile() {
 
         <div className="grid grid-cols-2 gap-4 text-sm">
           {[
-            { label: "Phone", value: me.phone },
+            { label: "Phone", value: me.phone || "Not added" },
             { label: "Email", value: me.email },
-            { label: "District", value: me.location.district },
-            { label: "Hours Served", value: `${me.hoursServed} hours` },
+            { label: "Location", value: me.location.label },
+            { label: "Missions Completed", value: String(me.missionsCompleted) },
           ].map(f => (
             <div key={f.label}>
               <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">{f.label}</p>
-              <p className="text-sm font-medium text-[#0f1b2d]">{f.value}</p>
+              <p className="text-sm font-medium text-[#0f1b2d] break-words">{f.value}</p>
             </div>
           ))}
         </div>
+        <button onClick={updateLocation} className="mt-4 text-xs font-semibold text-[#1e3a5f] hover:underline flex items-center gap-1">
+          <MapPin className="w-3 h-3" /> Use my current location
+        </button>
       </div>
 
       {/* Skills */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Skills</h3>
+        <h3 className="text-sm font-bold text-[#0f1b2d] mb-1">Skills</h3>
+        <p className="text-[11px] text-gray-400 mb-3">Tap to add or remove.</p>
         <div className="flex flex-wrap gap-2">
-          {me.skills.map(skill => {
+          {(Object.keys(SKILL_CONFIG) as (keyof typeof SKILL_CONFIG)[]).map(skill => {
             const cfg = SKILL_CONFIG[skill];
             const Icon = cfg.icon;
+            const on = me.skills.includes(skill);
             return (
-              <div key={skill} className="flex items-center gap-2 px-3 py-2 rounded-xl border" style={{ borderColor: cfg.color + "40", background: cfg.color + "10" }}>
+              <button key={skill} onClick={() => toggleSkill(skill)} className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-all" style={{ borderColor: on ? cfg.color : "#e5e7eb", background: on ? cfg.color + "15" : "#fff", opacity: on ? 1 : 0.7 }}>
                 <Icon className="w-3.5 h-3.5" style={{ color: cfg.color }} />
                 <span className="text-xs font-semibold" style={{ color: cfg.color }}>{cfg.label}</span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -508,32 +567,18 @@ function VolunteerProfile() {
       {/* Languages */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Languages</h3>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 mb-3">
           {me.languages.map(lang => (
-            <span key={lang} className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full font-medium">{lang}</span>
+            <span key={lang} className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full font-medium flex items-center gap-1.5">
+              {lang}
+              <button onClick={() => patchRecord("volunteers", meId, { languages: me.languages.filter(l => l !== lang) })} className="text-gray-400 hover:text-red-500">×</button>
+            </span>
           ))}
         </div>
-      </div>
-
-      {/* Availability schedule */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Availability Schedule</h3>
-        <div className="space-y-2">
-          {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day, i) => (
-            <div key={day} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-              <span className="text-xs font-medium text-[#0f1b2d] w-24">{day}</span>
-              <div className="flex items-center gap-2">
-                {i < 5 ? (
-                  <span className="text-xs text-gray-500">8:00 AM – 8:00 PM</span>
-                ) : (
-                  <span className="text-xs text-gray-400">All day</span>
-                )}
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${i < 5 ? "bg-green-100 text-green-700" : "bg-teal-100 text-teal-700"}`}>
-                  {i < 5 ? "Weekday" : "Weekend"}
-                </span>
-              </div>
-            </div>
-          ))}
+        <div className="flex gap-2">
+          <input value={langDraft} onChange={e => setLangDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addLanguage(); } }} placeholder="Add a language"
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#1e3a5f]" />
+          <button onClick={addLanguage} className="px-3 py-2 rounded-xl bg-[#1e3a5f] text-white text-xs font-semibold">Add</button>
         </div>
       </div>
     </div>
@@ -542,21 +587,23 @@ function VolunteerProfile() {
 
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 export default function VolunteerPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
+  useDbRevision();
+  const session = useSession();
+  meId = session.profile!.id;
   const [activePage, setActivePage] = useState<VolunteerPage>("dashboard");
-  const [isAvailable, setIsAvailable] = useState(true);
-  const [notifs, setNotifs] = useState(NOTIFICATIONS);
-  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>(INITIAL_RESCUE_POLLS);
-  const [userHearts, setUserHearts] = useState<Record<string, boolean>>({});
+  const [notifs, setNotifs] = usePersistedState("notifications");
+  const [rescuePolls, setRescuePolls] = usePersistedState("rescuePolls");
+  const isAvailable = getMe().isAvailable;
+  const userHearts: Record<string, boolean> = Object.fromEntries(rescuePolls.map(p => [p.id, !!p.heartedBy?.includes(meId)]));
 
   const handleToggleHeart = (pollId: string) => {
     const hasHearted = userHearts[pollId];
     setRescuePolls(prev => prev.map(poll => {
       if (poll.id !== pollId) return poll;
-      const newHearts = hasHearted ? Math.max(0, poll.hearts - 1) : poll.hearts + 1;
-      return { ...poll, hearts: newHearts };
-    }).sort((a, b) => b.hearts - a.hearts));
-    setUserHearts(prev => ({ ...prev, [pollId]: !hasHearted }));
-    toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert ❤️");
+      const heartedBy = hasHearted ? (poll.heartedBy ?? []).filter(id => id !== meId) : [...(poll.heartedBy ?? []), meId];
+      return { ...poll, heartedBy, hearts: Math.max(0, poll.hearts + (hasHearted ? -1 : 1)) };
+    }));
+    toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert");
   };
 
   return (
@@ -564,15 +611,15 @@ export default function VolunteerPortal({ onNavigate }: { onNavigate: (v: string
       navItems={NAV_ITEMS}
       activePage={activePage}
       onNavigate={p => setActivePage(p as VolunteerPage)}
-      userName="Karim Ahmed"
+      userName={session.name}
       userRole="Volunteer"
-      userInitials="KA"
+      userInitials={initialsOf(session.name)}
       portalLabel="Volunteer Portal"
       onLogout={() => onNavigate("landing")}
       notifications={notifs}
       onMarkRead={id => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))}
     >
-      {activePage === "dashboard" && <VolunteerDashboard isAvailable={isAvailable} setIsAvailable={setIsAvailable} rescuePolls={rescuePolls} onToggleHeart={handleToggleHeart} userHearts={userHearts} />}
+      {activePage === "dashboard" && <VolunteerDashboard isAvailable={isAvailable} setIsAvailable={v => patchRecord("volunteers", meId, { isAvailable: v })} rescuePolls={rescuePolls} onToggleHeart={handleToggleHeart} userHearts={userHearts} />}
       {activePage === "missions"  && <Missions />}
       {activePage === "history"   && <VolunteerHistory />}
       {activePage === "profile"   && <VolunteerProfile />}
