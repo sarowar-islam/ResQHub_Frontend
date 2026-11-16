@@ -47,6 +47,14 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
+const DEMO_PASSWORD = "123456";
+const QUICK_ACCOUNTS = [
+  { label: "Victim", email: "u2204107@student.cuet.ac.bd", color: "#dc2626" },
+  { label: "Volunteer", email: "sarowar2204107@gmail.com", color: "#0d9488" },
+  { label: "Organization", email: "ss7373992@gmail.com", color: "#1e3a5f" },
+  { label: "Admin", email: "sarowarislam1122@gmail.com", color: "#7c3aed" },
+];
+
 interface AuthProps {
   initialMode?: AuthMode;
   defaultRole?: UserRole;
@@ -117,6 +125,21 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
       if (mode === "login") setErrors({ password: msg });
       else if (mode === "signup" && /exist|registered/i.test(msg)) setErrors({ email: msg });
       toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickLogin = async (quickEmail: string) => {
+    setEmail(quickEmail);
+    setPassword(DEMO_PASSWORD);
+    setErrors({});
+    setLoading(true);
+    try {
+      await session.signIn(quickEmail, DEMO_PASSWORD);
+      toast.success("Signed in. Loading your dashboard…");
+    } catch (err: any) {
+      toast.error(err.message || "Quick sign-in failed. Has the demo data been seeded?");
     } finally {
       setLoading(false);
     }
@@ -281,6 +304,26 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                   ? "Sign in to access your ResQHub portal."
                   : "Join ResQHub and start making a difference today."}
               </p>
+
+              {mode === "login" && (
+                <div className="mb-5 rounded-xl border border-dashed border-gray-300 bg-white p-3">
+                  <p className="text-[11px] font-semibold text-gray-500 mb-2">Quick access (demo accounts)</p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {QUICK_ACCOUNTS.map(q => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        disabled={loading}
+                        onClick={() => quickLogin(q.email)}
+                        className="py-2 px-2 rounded-lg border border-gray-200 text-xs font-semibold text-[#0f1b2d] hover:bg-gray-50 disabled:opacity-60 transition-colors"
+                        style={{ borderBottom: `3px solid ${q.color}` }}
+                      >
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {mode === "signup" && (
                 <div className="mb-5">

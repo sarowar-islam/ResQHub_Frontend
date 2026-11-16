@@ -3,6 +3,7 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
+import { SEED_ACCOUNTS, SEED_DATA, SEED_GENERATED_AT } from "./seed_data.tsx";
 
 const app = new Hono();
 app.use("*", logger(console.log));
@@ -312,6 +313,73 @@ app.put(`${PREFIX}/collections/:name`, async (c) => {
     return c.json({ saved, denied });
   } catch (e) {
     console.log("write failed", name, e);
+    return c.json({ error: String(e) }, 500);
+  }
+});
+
+// ---------- demo data seeding ----------
+// POST /seed with header x-seed-secret = SEED_SECRET (an Edge Function secret). Disabled when the secret is not set.
+// Creates confirmed demo Auth users and writes every demo record. Safe to run repeatedly.
+app.post(`${PREFIX}/seed`, async (c) => {
+  const secret = Deno.env.get("SEED_SECRET");
+  if (!secret) return c.json({ error: "Seeding is disabled. Set the SEED_SECRET function secret first." }, 404);
+  if (c.req.header("x-seed-secret") !== secret) return c.json({ error: "Forbidden" }, 403);
+  try {
+    // 1. Auth users
+    const existing = new Map<string, string>();
+    for (let page = 1; page < 20; page++) {
+      const { data, error } = await authClient.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error) throw error;
+      data.users.forEach((u) => existing.set(String(u.email).toLowerCase(), u.id));
+      if (data.users.length < 1000) break;
+    }
+    const ids: Record<string, string> = {};
+    const failures: string[] = [];
+    const makeUser = async (a: (typeof SEED_ACCOUNTS)[number]) => {
+      const attrs: any = {
+        email: a.email, password: a.password, email_confirm: true,
+        user_metadata: { name: a.name, phone: a.phone, role: a.role },
+        app_metadata: a.role === "admin" ? { role: "admin" } : {},
+      };
+      const known = existing.get(a.email.toLowerCase());
+      if (known) {
+        const { error } = await authClient.auth.admin.updateUserById(known, attrs);
+        if (error) { failures.push(`${a.email}: ${error.message}`); return; }
+        ids[a.key] = known;
+      } else {
+        const { data, error } = await authClient.auth.admin.createUser(attrs);
+        if (error || !data.user) { failures.push(`${a.email}: ${error?.message}`); return; }
+        ids[a.key] = data.user.id;
+      }
+    };
+    for (let i = 0; i < SEED_ACCOUNTS.length; i += 6) await Promise.all(SEED_ACCOUNTS.slice(i, i + 6).map(makeUser));
+    if (failures.length) return c.json({ error: "Some accounts failed", failures }, 500);
+
+    // 2. Records: swap "@key" for real user ids and move every timestamp so the data looks current.
+    const shift = Date.now() - SEED_GENERATED_AT;
+    const fix = (v: any): any => {
+      if (typeof v === "string") {
+        if (v.startsWith("@") && ids[v.slice(1)]) return ids[v.slice(1)];
+        if (/^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(new Date(v).getTime() + shift).toISOString();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(new Date(v).getTime() + shift).toISOString().slice(0, 10);
+        return v;
+      }
+      if (Array.isArray(v)) return v.map(fix);
+      if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fix(x)]));
+      return v;
+    };
+    const counts: Record<string, number> = {};
+    for (const [col, rows] of Object.entries(SEED_DATA)) {
+      const recs = (rows as Rec[]).map((r) => fix(r) as Rec);
+      counts[col] = recs.length;
+      for (let i = 0; i < recs.length; i += 100) {
+        const chunk = recs.slice(i, i + 100);
+        await kv.mset(chunk.map((r) => rk(col, r.id)), chunk);
+      }
+    }
+    return c.json({ ok: true, accounts: Object.keys(ids).length, records: counts });
+  } catch (e) {
+    console.log("seed failed", e);
     return c.json({ error: String(e) }, 500);
   }
 });
