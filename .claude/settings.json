@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X PUT \"https://itotrarfinpaniuswdga.supabase.co/functions/v1/server/settings\")",
+      "Bash(curl -s -X POST https://itotrarfinpaniuswdga.supabase.co/functions/v1/server/signup -H 'Authorization: Bearer sb_publishable_RXjYr386-NXcGYfdIBq84A_b8Uni5TZ' -H 'Content-Type: application/json' -d '{\"username\":\"testtestuser\",\"password\":\"testpassword123\",\"displayName\":\"Test User\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)"
+    ]
+  }
+}

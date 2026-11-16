@@ -8,24 +8,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  ALERTS, HELP_REQUESTS, SHELTERS, NOTIFICATIONS
+  ALERTS, HELP_REQUESTS, SHELTERS, NOTIFICATIONS, INITIAL_RESCUE_POLLS
 } from "../data/mockData";
+import type { RescuePoll } from "../data/mockData";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
 import { MAP_MARKERS } from "../data/mockData";
 import { useSession } from "../context/SessionContext";
 
 type VictimPage = "dashboard" | "request-help" | "track-requests" | "shelters" | "profile";
-
-type RescuePoll = {
-  id: string;
-  victimName: string;
-  location: string;
-  note: string;
-  reporter: string;
-  time: string;
-  votes: { true: number; false: number };
-};
 
 const NAV_ITEMS = [
   { id: "dashboard",       label: "Dashboard",      icon: LayoutDashboard },
@@ -67,13 +58,13 @@ function StatusBadge({ status }: { status: keyof typeof STATUS_CONFIG }) {
 function VictimDashboard({
   onNavigate,
   rescuePolls,
-  onVoteRescue,
-  userVotes,
+  onToggleHeart,
+  userHearts,
 }: {
   onNavigate: (p: VictimPage) => void;
   rescuePolls: RescuePoll[];
-  onVoteRescue: (pollId: string, vote: boolean) => void;
-  userVotes: Record<string, boolean>;
+  onToggleHeart: (pollId: string) => void;
+  userHearts: Record<string, boolean>;
 }) {
   return (
     <div className="space-y-6">
@@ -116,17 +107,19 @@ function VictimDashboard({
 
       {/* Rescue verification poll */}
       {rescuePolls.length > 0 && (
-        <div className="bg-white border border-yellow-200 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white border border-rose-200 rounded-2xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-[#0f1b2d]">Rescue verification polls</h3>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full">Pending</span>
+            <h3 className="text-sm font-bold text-[#0f1b2d] flex items-center gap-1.5">
+              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" /> Rescue verification polls
+            </h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">Community Verified</span>
           </div>
           <div className="space-y-3">
-            {rescuePolls.map(poll => {
-              const currentVote = userVotes[poll.id];
+            {[...rescuePolls].sort((a, b) => b.hearts - a.hearts).map(poll => {
+              const hasHearted = userHearts[poll.id];
 
               return (
-                <div key={poll.id} className="border border-yellow-100 bg-yellow-50 rounded-xl p-3">
+                <div key={poll.id} className="border border-rose-100 bg-rose-50/50 rounded-xl p-3">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
                       <p className="text-xs font-bold text-[#0f1b2d]">{poll.victimName}</p>
@@ -136,21 +129,15 @@ function VictimDashboard({
                   </div>
                   <p className="text-xs text-gray-600 mb-3 leading-relaxed">{poll.note}</p>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => onVoteRescue(poll.id, true)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors ${currentVote === true ? "bg-green-700 text-white ring-2 ring-green-200" : "bg-green-600 text-white hover:bg-green-700"}`}
-                      >
-                        True ({poll.votes.true})
-                      </button>
-                      <button
-                        onClick={() => onVoteRescue(poll.id, false)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors ${currentVote === false ? "bg-red-700 text-white ring-2 ring-red-200" : "bg-red-500 text-white hover:bg-red-600"}`}
-                      >
-                        False ({poll.votes.false})
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-gray-500">{currentVote === undefined ? "No vote cast" : `Your vote: ${currentVote ? "True" : "False"}`}</span>
+                    <button
+                      onClick={() => onToggleHeart(poll.id)}
+                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${hasHearted ? "bg-rose-600 text-white shadow-sm scale-105" : "bg-white border border-rose-200 text-rose-600 hover:bg-rose-50"}`}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${hasHearted ? "fill-white text-white" : "text-rose-500 fill-rose-500"}`} />
+                      <span>{poll.hearts}</span>
+                      <span className="text-[10px] opacity-80">{hasHearted ? "Supported" : "Support"}</span>
+                    </button>
+                    <span className="text-[10px] text-gray-500">{hasHearted ? "You supported this rescue" : "Click heart to verify & support"}</span>
                   </div>
                 </div>
               );
@@ -300,7 +287,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
         note: rescueNote,
         reporter: "Relative / Witness",
         time: "Just now",
-        votes: { true: 2, false: 0 },
+        hearts: 1,
       };
 
       onBroadcastRescue(poll);
@@ -380,32 +367,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
           </div>
         </div>
 
-        {/* Priority */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <label className="block text-sm font-bold text-[#0f1b2d] mb-3">Priority Level <span className="text-red-500">*</span></label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { id: "critical", label: "Critical", desc: "Immediate danger", color: "#dc2626" },
-              { id: "high",     label: "High",     desc: "Urgent need",     color: "#f97316" },
-              { id: "medium",   label: "Medium",   desc: "Within 24h",      color: "#eab308" },
-              { id: "low",      label: "Low",      desc: "Non-urgent",      color: "#6b7280" },
-            ].map(p => {
-              const isActive = priority === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPriority(p.id)}
-                  className={`py-3 px-3 rounded-xl border-2 text-left transition-all ${isActive ? "" : "border-gray-200 hover:border-gray-300"}`}
-                  style={isActive ? { borderColor: p.color, background: p.color + "10" } : {}}
-                >
-                  <p className="text-xs font-bold" style={{ color: isActive ? p.color : "#374151" }}>{p.label}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{p.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      
 
         {/* Description */}
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
@@ -899,52 +861,20 @@ export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) =
     "+880 1812345678",
     "+880 1912345678",
   ]);
-  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>([
-    {
-      id: "rescue-1",
-      victimName: "Rafiq Islam",
-      location: "Flooded lane near Sylhet Sadar",
-      note: "Relatives report he was trapped near the embankment and lost connection. Volunteers should verify before dispatching rescue.",
-      reporter: "Amena Begum",
-      time: "7 min ago",
-      votes: { true: 12, false: 3 },
-    },
-    {
-      id: "rescue-2",
-      victimName: "Sadia Noor",
-      location: "Bashundhara, Dhaka",
-      note: "Witness says the victim may be stranded in a flooded apartment building. Please confirm location.",
-      reporter: "Neighbor",
-      time: "11 min ago",
-      votes: { true: 8, false: 1 },
-    },
-  ]);
-  const [userVotes, setUserVotes] = useState<Record<string, boolean>>({});
+  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>(INITIAL_RESCUE_POLLS);
+  const [userHearts, setUserHearts] = useState<Record<string, boolean>>({});
 
-  const handleVoteRescue = (pollId: string, vote: boolean) => {
-    const previousVote = userVotes[pollId];
-
-    if (previousVote === vote) {
-      toast.info(`You already voted ${vote ? "True" : "False"} for this poll.`);
-      return;
-    }
+  const handleToggleHeart = (pollId: string) => {
+    const hasHearted = userHearts[pollId];
 
     setRescuePolls(prev => prev.map(poll => {
       if (poll.id !== pollId) return poll;
+      const newHearts = hasHearted ? Math.max(0, poll.hearts - 1) : poll.hearts + 1;
+      return { ...poll, hearts: newHearts };
+    }).sort((a, b) => b.hearts - a.hearts));
 
-      const updatedVotes = { ...poll.votes };
-
-      if (previousVote !== undefined) {
-        updatedVotes[previousVote ? "true" : "false"] = Math.max(0, updatedVotes[previousVote ? "true" : "false"] - 1);
-      }
-
-      updatedVotes[vote ? "true" : "false"] += 1;
-
-      return { ...poll, votes: updatedVotes };
-    }));
-
-    setUserVotes(prev => ({ ...prev, [pollId]: vote }));
-    toast.success(previousVote === undefined ? (vote ? "Confirmed as a valid rescue alert." : "Marked as not a valid rescue alert.") : `Your vote was updated to ${vote ? "True" : "False"}.`);
+    setUserHearts(prev => ({ ...prev, [pollId]: !hasHearted }));
+    toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert ❤️");
   };
 
   return (
@@ -960,8 +890,8 @@ export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) =
       notifications={notifs}
       onMarkRead={id => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))}
     >
-      {activePage === "dashboard"       && <VictimDashboard onNavigate={setActivePage} rescuePolls={rescuePolls} onVoteRescue={handleVoteRescue} userVotes={userVotes} />}
-      {activePage === "request-help"    && <RequestHelp onBroadcastRescue={(poll) => setRescuePolls(prev => [poll, ...prev])} />}
+      {activePage === "dashboard"       && <VictimDashboard onNavigate={setActivePage} rescuePolls={rescuePolls} onToggleHeart={handleToggleHeart} userHearts={userHearts} />}
+      {activePage === "request-help"    && <RequestHelp onBroadcastRescue={(poll) => setRescuePolls(prev => [poll, ...prev].sort((a, b) => b.hearts - a.hearts))} />}
       {activePage === "track-requests"  && <TrackRequests />}
       {activePage === "shelters"        && <SheltersPage />}
       {activePage === "profile"         && <VictimProfile emergencyContacts={emergencyContacts} />}

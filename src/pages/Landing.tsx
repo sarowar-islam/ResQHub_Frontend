@@ -141,18 +141,23 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           <section className="max-w-7xl mx-auto px-4 py-16">
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
               {EMERGENCY_CONTACTS.map(contact => (
-                <div key={contact.name} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#dffaf6] flex items-center justify-center"><Phone className="w-4 h-4 text-[#0d9488]" /></div>
-                      <div>
-                        <p className="text-sm font-bold text-[#0f1b2d]">{contact.name}</p>
-                        <p className="text-[11px] text-slate-500">{contact.available}</p>
+                <div key={contact.name} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#dffaf6] flex items-center justify-center"><Phone className="w-4 h-4 text-[#0d9488]" /></div>
+                        <div>
+                          <p className="text-sm font-bold text-[#0f1b2d]">{contact.name}</p>
+                          <p className="text-[11px] text-slate-500">{contact.available}</p>
+                        </div>
                       </div>
+                      <span className="text-[10px] font-semibold text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-full">{contact.category || "24/7"}</span>
                     </div>
-                    <span className="text-xs font-semibold text-[#0d9488]">24/7</span>
+                    <p className="text-xl font-extrabold text-[#0f1b2d] mb-2">{contact.number}</p>
+                    {contact.description && (
+                      <p className="text-xs text-slate-500 leading-relaxed">{contact.description}</p>
+                    )}
                   </div>
-                  <p className="text-xl font-extrabold text-[#0f1b2d]">{contact.number}</p>
                 </div>
               ))}
             </div>
@@ -705,7 +710,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           <div className="flex items-center gap-2.5 mb-6">
             <Phone className="w-4 h-4 text-teal-400" />
             <h2 className="text-base font-bold text-white">Emergency Contacts</h2>
-            <span className="text-xs text-blue-300 bg-white/8 px-2 py-0.5 rounded-full">Bangladesh</span>
+            <span className="text-xs text-blue-300 bg-white/8 px-2 py-0.5 rounded-full">Bangladesh Government & Relief Services</span>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {EMERGENCY_CONTACTS.map(c => (
@@ -713,7 +718,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                 <Phone className="w-4 h-4 text-teal-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-white truncate">{c.name}</p>
-                  <p className="text-[10px] text-blue-300">{c.available}</p>
+                  <p className="text-[10px] text-blue-300">{c.category ? `${c.category} · ${c.available}` : c.available}</p>
                 </div>
                 <span className="text-sm font-bold text-teal-300 flex-shrink-0">{c.number}</span>
               </div>

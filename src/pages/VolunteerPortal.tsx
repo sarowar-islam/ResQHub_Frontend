@@ -8,7 +8,8 @@ import {
   LifeBuoy, Activity, Users
 } from "lucide-react";
 import { toast } from "sonner";
-import { HELP_REQUESTS, VOLUNTEERS, NOTIFICATIONS } from "../data/mockData";
+import { HELP_REQUESTS, VOLUNTEERS, NOTIFICATIONS, INITIAL_RESCUE_POLLS } from "../data/mockData";
+import type { RescuePoll } from "../data/mockData";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
 import { MAP_MARKERS } from "../data/mockData";
@@ -48,7 +49,19 @@ const TYPE_COLOR: Record<string, string> = {
 const me = VOLUNTEERS[0]; // Karim Ahmed
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
-function VolunteerDashboard({ isAvailable, setIsAvailable }: { isAvailable: boolean; setIsAvailable: (v: boolean) => void }) {
+function VolunteerDashboard({
+  isAvailable,
+  setIsAvailable,
+  rescuePolls,
+  onToggleHeart,
+  userHearts,
+}: {
+  isAvailable: boolean;
+  setIsAvailable: (v: boolean) => void;
+  rescuePolls: RescuePoll[];
+  onToggleHeart: (pollId: string) => void;
+  userHearts: Record<string, boolean>;
+}) {
   const pending = HELP_REQUESTS.filter(r => r.status === "pending" || r.status === "accepted");
   const assigned = HELP_REQUESTS.filter(r => r.status === "assigned");
 
@@ -118,6 +131,47 @@ function VolunteerDashboard({ isAvailable, setIsAvailable }: { isAvailable: bool
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Rescue verification poll */}
+      {rescuePolls.length > 0 && (
+        <div className="bg-white border border-rose-200 rounded-2xl p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-[#0f1b2d] flex items-center gap-1.5">
+              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" /> Rescue verification polls
+            </h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">Community Verified</span>
+          </div>
+          <div className="space-y-3">
+            {[...rescuePolls].sort((a, b) => b.hearts - a.hearts).map(poll => {
+              const hasHearted = userHearts[poll.id];
+
+              return (
+                <div key={poll.id} className="border border-rose-100 bg-rose-50/50 rounded-xl p-3">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-xs font-bold text-[#0f1b2d]">{poll.victimName}</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{poll.location}</p>
+                    </div>
+                    <span className="text-[10px] text-gray-500">{poll.time}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3 leading-relaxed">{poll.note}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => onToggleHeart(poll.id)}
+                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${hasHearted ? "bg-rose-600 text-white shadow-sm scale-105" : "bg-white border border-rose-200 text-rose-600 hover:bg-rose-50"}`}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${hasHearted ? "fill-white text-white" : "text-rose-500 fill-rose-500"}`} />
+                      <span>{poll.hearts}</span>
+                      <span className="text-[10px] opacity-80">{hasHearted ? "Supported" : "Support"}</span>
+                    </button>
+                    <span className="text-[10px] text-gray-500">{hasHearted ? "You supported this rescue" : "Click heart to verify & support"}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -491,6 +545,19 @@ export default function VolunteerPortal({ onNavigate }: { onNavigate: (v: string
   const [activePage, setActivePage] = useState<VolunteerPage>("dashboard");
   const [isAvailable, setIsAvailable] = useState(true);
   const [notifs, setNotifs] = useState(NOTIFICATIONS);
+  const [rescuePolls, setRescuePolls] = useState<RescuePoll[]>(INITIAL_RESCUE_POLLS);
+  const [userHearts, setUserHearts] = useState<Record<string, boolean>>({});
+
+  const handleToggleHeart = (pollId: string) => {
+    const hasHearted = userHearts[pollId];
+    setRescuePolls(prev => prev.map(poll => {
+      if (poll.id !== pollId) return poll;
+      const newHearts = hasHearted ? Math.max(0, poll.hearts - 1) : poll.hearts + 1;
+      return { ...poll, hearts: newHearts };
+    }).sort((a, b) => b.hearts - a.hearts));
+    setUserHearts(prev => ({ ...prev, [pollId]: !hasHearted }));
+    toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert ❤️");
+  };
 
   return (
     <PortalLayout
@@ -505,7 +572,7 @@ export default function VolunteerPortal({ onNavigate }: { onNavigate: (v: string
       notifications={notifs}
       onMarkRead={id => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))}
     >
-      {activePage === "dashboard" && <VolunteerDashboard isAvailable={isAvailable} setIsAvailable={setIsAvailable} />}
+      {activePage === "dashboard" && <VolunteerDashboard isAvailable={isAvailable} setIsAvailable={setIsAvailable} rescuePolls={rescuePolls} onToggleHeart={handleToggleHeart} userHearts={userHearts} />}
       {activePage === "missions"  && <Missions />}
       {activePage === "history"   && <VolunteerHistory />}
       {activePage === "profile"   && <VolunteerProfile />}

@@ -733,18 +733,55 @@ export const STATS = {
 };
 
 export const EMERGENCY_CONTACTS = [
-  { name: "National Emergency Helpline", number: "999", available: "24/7" },
-  { name: "Fire Service & Civil Defence", number: "199", available: "24/7" },
-  { name: "Flood Forecasting Centre", number: "10941", available: "24/7" },
-  { name: "BRAC Emergency Hotline", number: "16430", available: "24/7" },
-  { name: "Red Crescent Bangladesh", number: "+880-2-9884811", available: "8am–8pm" },
-  { name: "DGDA Drug Emergency", number: "16121", available: "9am–5pm" },
+  { name: "National Emergency Helpline", number: "999", available: "24/7", category: "Police, Fire & Ambulance", description: "Primary national emergency hotline for police, fire service, and ambulance." },
+  { name: "National Information Helpline", number: "333", available: "24/7", category: "Govt. Information", description: "Government information, citizen services, and grievance redressal." },
+  { name: "Fire Service & Civil Defence", number: "102", available: "24/7", category: "Fire & Rescue", description: "Direct emergency response for fires, building collapses, and disasters." },
+  { name: "Flood Forecasting & Warning Centre", number: "10941", available: "24/7", category: "Flood & Weather", description: "BWDB flood forecasting, water level warnings, and river advisories." },
+  { name: "Disaster Management Helpline", number: "1090", available: "24/7", category: "Disaster Relief", description: "Ministry of Disaster Management early warning and relief coordination." },
+  { name: "Health Helpline (Swasthya Batayon)", number: "16263", available: "24/7", category: "Medical & Ambulance", description: "DGHS medical advice, emergency health support, and ambulance booking." },
+  { name: "Women & Children Helpline", number: "109", available: "24/7", category: "Social Security", description: "Ministry of Women and Children Affairs emergency support hotline." },
+  { name: "National Child Helpline", number: "1098", available: "24/7", category: "Child Protection", description: "Department of Social Services child protection and rescue service." },
+  { name: "Electricity & Power Helpline", number: "16999", available: "24/7", category: "Utilities & Power", description: "Power grid, electricity outage, and electrical hazard emergency." },
+  { name: "Government Legal Aid Helpline", number: "16430", available: "24/7", category: "Legal Aid", description: "National Legal Aid Services Organization support hotline." },
+  { name: "Agriculture Call Centre", number: "16123", available: "24/7", category: "Agriculture", description: "Department of Agricultural Extension support and advisory." },
+  { name: "Bangladesh Red Crescent Society", number: "16226", available: "24/7", category: "Humanitarian", description: "BDRCS disaster management, blood bank, and first aid coordination." },
 ];
 
 export const PARTNER_NAMES = [
   "BRAC", "UNDP", "UNICEF", "Red Crescent", "Save the Children",
   "World Food Programme", "WHO Bangladesh", "Oxfam BD",
 ];
+
+export type RescuePoll = {
+  id: string;
+  victimName: string;
+  location: string;
+  note: string;
+  reporter: string;
+  time: string;
+  hearts: number;
+};
+
+export const INITIAL_RESCUE_POLLS: RescuePoll[] = [
+  {
+    id: "rescue-1",
+    victimName: "Rafiq Islam",
+    location: "Flooded lane near Sylhet Sadar",
+    note: "Relatives report he was trapped near the embankment and lost connection. Volunteers should verify before dispatching rescue.",
+    reporter: "Amena Begum",
+    time: "7 min ago",
+    hearts: 15,
+  },
+  {
+    id: "rescue-2",
+    victimName: "Sadia Noor",
+    location: "Bashundhara, Dhaka",
+    note: "Witness says the victim may be stranded in a flooded apartment building. Please confirm location.",
+    reporter: "Neighbor",
+    time: "11 min ago",
+    hearts: 9,
+  },
+].sort((a, b) => b.hearts - a.hearts);
 
 export const AI_RESPONSES: Record<string, string> = {
   "summarize": "**Field Report Summary — Sylhet Flood (June 15, 2024)**\n\nTotal active requests: 312 (47 critical, 128 high priority). Primary needs: rescue (34%), food (28%), medicine (18%). Avg response time: 2.4 hours. Volunteer deployment: 87% capacity. Recommendation: Deploy 3 additional boat-rescue teams to Sunamganj sector immediately.",
