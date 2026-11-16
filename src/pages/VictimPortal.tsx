@@ -8,12 +8,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import type { RescuePoll } from "../data/mockData";
+import type { RescuePoll } from "../types";
 import PortalLayout from "../components/PortalLayout";
 import MapView from "../components/MapView";
 
 import { useSession } from "../context/SessionContext";
-import { db, usePersistedState, addToCollection } from "../context/DataContext";
+import { useUserLocation } from "../context/LocationContext";
+import { distanceKm, initialsOf, mapMarkers, timeAgo } from "../lib/derive";
+import { db, useDbRevision, usePersistedState, addToCollection } from "../context/DataContext";
 
 type VictimPage = "dashboard" | "request-help" | "track-requests" | "shelters" | "profile";
 
@@ -65,13 +67,18 @@ function VictimDashboard({
   onToggleHeart: (pollId: string) => void;
   userHearts: Record<string, boolean>;
 }) {
+  const session = useSession();
+  const { location: userLoc } = useUserLocation();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning," : hour < 17 ? "Good afternoon," : "Good evening,";
+  const alert = db.alerts[0];
   return (
     <div className="space-y-6">
       {/* Welcome */}
       <div className="bg-[#1e3a5f] rounded-2xl p-6 text-white">
-        <p className="text-sm text-blue-200 mb-1">Good afternoon,</p>
-        <h2 className="text-xl font-bold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Mohammad Rafiqul Islam</h2>
-        <p className="text-xs text-blue-300">Stay safe. ResQHub is monitoring 3 active emergencies in your area.</p>
+        <p className="text-sm text-blue-200 mb-1">{greeting}</p>
+        <h2 className="text-xl font-bold mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{session.name}</h2>
+        <p className="text-xs text-blue-300">Stay safe. ResQHub is coordinating {db.stats.activeRequests} active {db.stats.activeRequests === 1 ? "request" : "requests"} right now.</p>
         <div className="mt-4 flex gap-2">
           <button
             onClick={() => onNavigate("request-help")}
@@ -89,20 +96,22 @@ function VictimDashboard({
       </div>
 
       {/* Active Alert */}
+      {alert && (
       <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
         <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
           <AlertTriangle className="w-4 h-4 text-red-600" />
         </div>
         <div>
-          <p className="text-sm font-bold text-red-800">{db.alerts[0].title}</p>
-          <p className="text-xs text-red-600 mt-0.5">{db.alerts[0].description.slice(0, 120)}…</p>
+          <p className="text-sm font-bold text-red-800">{alert.title}</p>
+          <p className="text-xs text-red-600 mt-0.5">{alert.description.slice(0, 120)}…</p>
           <div className="flex gap-1.5 mt-2">
-            {db.alerts[0].affectedAreas.map(a => (
+            {alert.affectedAreas.map(a => (
               <span key={a} className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded-full border border-red-200">{a}</span>
             ))}
           </div>
         </div>
       </div>
+      )}
 
       {/* Rescue verification poll */}
       {rescuePolls.length > 0 && (
@@ -124,7 +133,7 @@ function VictimDashboard({
                       <p className="text-xs font-bold text-[#0f1b2d]">{poll.victimName}</p>
                       <p className="text-[10px] text-gray-500 mt-0.5">{poll.location}</p>
                     </div>
-                    <span className="text-[10px] text-gray-500">{poll.time}</span>
+                    <span className="text-[10px] text-gray-500">{poll.createdAt ? timeAgo(poll.createdAt) : poll.time}</span>
                   </div>
                   <p className="text-xs text-gray-600 mb-3 leading-relaxed">{poll.note}</p>
                   <div className="flex items-center justify-between gap-2">
@@ -181,6 +190,9 @@ function VictimDashboard({
           </button>
         </div>
         <div className="space-y-3">
+          {db.helpRequests.filter(r => r.status !== "completed" && r.status !== "cancelled").length === 0 && (
+            <p className="text-xs text-gray-400 bg-white rounded-2xl border border-gray-100 p-4">You have no active requests.</p>
+          )}
           {db.helpRequests.filter(r => r.status !== "completed" && r.status !== "cancelled").slice(0, 2).map(req => (
             <div key={req.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
               <div className="flex items-start justify-between mb-2">
@@ -228,7 +240,7 @@ function VictimDashboard({
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-400 flex items-center gap-1"><MapPin className="w-3 h-3" />{s.distance} km away</span>
+                  <span className="text-gray-400 flex items-center gap-1"><MapPin className="w-3 h-3" />{userLoc ? `${distanceKm(userLoc, s.location).toFixed(1)} km away` : s.location.district || "Distance unknown"}</span>
                   <div className="flex gap-1">
                     {s.hasMedical && <span className="text-[9px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full">Medical</span>}
                     {s.hasFood && <span className="text-[9px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full">Food</span>}
@@ -252,10 +264,12 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
   const [contact, setContact] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [mode, setMode] = useState<"self" | "relay">("self");
-  const [rescueName, setRescueName] = useState("Amena Begum");
-  const [rescueLocation, setRescueLocation] = useState("Bashundhara, Dhaka");
+  const [rescueName, setRescueName] = useState("");
+  const [rescueLocation, setRescueLocation] = useState("");
   const [rescueNote, setRescueNote] = useState("");
-  const [emergencyContacts, setEmergencyContacts] = useState<string[]>(["+880 1812345678", "+880 1912345678"]);
+  const emergencyContacts = session.profile?.emergencyContacts ?? [];
+  const setEmergencyContacts = (fn: (prev: string[]) => string[]) => { session.updateProfile({ emergencyContacts: fn(emergencyContacts) }); };
+  const [lastRequestId, setLastRequestId] = useState("");
   const [newContact, setNewContact] = useState("");
   const [mapSelectedLocation, setMapSelectedLocation] = useState("");
   const [requestPoint, setRequestPoint] = useState<{ lat: number; lng: number } | null>(null);
@@ -286,9 +300,12 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
         victimName: rescueName,
         location: rescueLocation,
         note: rescueNote,
-        reporter: "Relative / Witness",
+        reporter: session.name || "Relative / Witness",
         time: "Just now",
+        createdAt: new Date().toISOString(),
         hearts: 1,
+        heartedBy: [session.profile!.id],
+        ownerId: session.profile!.id,
       };
 
       onBroadcastRescue(poll);
@@ -303,15 +320,18 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
         return;
       }
       const now = new Date().toISOString();
+      const requestId = `req-${Date.now()}`;
+      setLastRequestId(requestId);
       addToCollection("helpRequests", {
-        id: `req-${Date.now()}`,
+        id: requestId,
+        ownerId: session.profile!.id,
         victimName: session.name || "Anonymous",
         victimPhone: session.phone || contact,
         type: type as any,
         priority: priority as any,
         status: "pending",
         description,
-        location: { lat: requestPoint.lat, lng: requestPoint.lng, label: requestLabel, district: "" },
+        location: { lat: requestPoint.lat, lng: requestPoint.lng, label: requestLabel, district: requestLabel.split(",").slice(-3, -2)[0]?.trim() ?? "" },
         createdAt: now,
         updatedAt: now,
         timeline: [{ status: "pending", note: "Request submitted", timestamp: now }],
@@ -346,7 +366,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
           <CheckCircle className="w-8 h-8 text-green-600" />
         </div>
         <h2 className="text-xl font-bold text-[#0f1b2d] mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Request Submitted!</h2>
-        <p className="text-sm text-gray-500 mb-2">Your request ID is <strong className="text-[#1e3a5f]">#REQ-{Date.now().toString().slice(-4)}</strong></p>
+        <p className="text-sm text-gray-500 mb-2">Your request ID is <strong className="text-[#1e3a5f]">#{lastRequestId.replace("req-", "REQ-") || "pending"}</strong></p>
         <p className="text-sm text-gray-500 mb-6">A volunteer has been notified and will contact you shortly. Average response time is 2.4 hours.</p>
         <button onClick={() => setSubmitted(false)} className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm hover:opacity-90" style={{ background: "#1e3a5f" }}>
           Submit Another Request
@@ -457,7 +477,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
                 <input
                   value={rescueName}
                   onChange={e => setRescueName(e.target.value)}
-                  placeholder="Rafiq Islam"
+                  placeholder="Full name"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10"
                 />
               </div>
@@ -466,7 +486,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
                 <input
                   value={rescueLocation}
                   onChange={e => setRescueLocation(e.target.value)}
-                  placeholder="Bashundhara, Dhaka"
+                  placeholder="Search the map below or type an address"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1e3a5f] focus:ring-2 focus:ring-[#1e3a5f]/10"
                 />
               </div>
@@ -569,7 +589,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
 
 // ─── Track Requests ───────────────────────────────────────────────────────────
 function TrackRequests() {
-  const [expanded, setExpanded] = useState<string | null>("req-001");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
@@ -587,7 +607,7 @@ function TrackRequests() {
         </div>
       </div>
 
-      {db.helpRequests.map(req => {
+      {[...db.helpRequests].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(req => {
         const isOpen = expanded === req.id;
         return (
           <div key={req.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -655,12 +675,12 @@ function TrackRequests() {
 
                 {req.assignedVolunteer && (
                   <div className="mt-4 p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#0d9488] flex items-center justify-center text-white text-xs font-bold">KA</div>
+                    <div className="w-8 h-8 rounded-full bg-[#0d9488] flex items-center justify-center text-white text-xs font-bold">{initialsOf(req.assignedVolunteer)}</div>
                     <div>
-                      <p className="text-xs font-semibold text-teal-800">Karim Ahmed — Assigned Volunteer</p>
-                      <p className="text-[10px] text-teal-600">Skills: Boat Rescue, First Aid · Rating: 4.9 ★</p>
+                      <p className="text-xs font-semibold text-teal-800">{req.assignedVolunteer} — Assigned Volunteer</p>
+                      {(() => { const v = db.volunteers.find(x => x.id === req.assignedVolunteerId); return v ? <p className="text-[10px] text-teal-600">Skills: {v.skills.join(", ") || "General"} · Rating: {v.rating ? `${v.rating} ★` : "New"}</p> : null; })()}
                     </div>
-                    <button onClick={() => toast.success("Calling volunteer…")} className="ml-auto p-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors">
+                    <button onClick={() => { const v = db.volunteers.find(x => x.id === req.assignedVolunteerId); if (v?.phone) window.location.href = `tel:${v.phone}`; else toast.info("No phone number on file for this volunteer."); }} className="ml-auto p-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors">
                       <Phone className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -676,6 +696,7 @@ function TrackRequests() {
 
 // ─── Shelters ─────────────────────────────────────────────────────────────────
 function SheltersPage() {
+  const { location: userLoc } = useUserLocation();
   const [search, setSearch] = useState("");
   const [filterMedical, setFilterMedical] = useState(false);
   const [filterFood, setFilterFood] = useState(false);
@@ -722,7 +743,7 @@ function SheltersPage() {
       </div>
 
       {/* Map */}
-      <MapView markers={db.mapMarkers.filter(m => m.type === "shelter")} height="h-56" />
+      <MapView markers={mapMarkers().filter(m => m.type === "shelter")} height="h-56" />
 
       {/* Shelter cards */}
       <div className="grid sm:grid-cols-2 gap-4">
@@ -772,9 +793,9 @@ function SheltersPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400 flex items-center gap-1"><Navigation className="w-3 h-3" />{s.distance} km away</span>
+                <span className="text-xs text-gray-400 flex items-center gap-1"><Navigation className="w-3 h-3" />{userLoc ? `${distanceKm(userLoc, s.location).toFixed(1)} km away` : "Allow location for distance"}</span>
                 <button
-                  onClick={() => toast.success(`Directions to ${s.name} opened.`)}
+                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${s.location.lat},${s.location.lng}`, "_blank", "noopener")}
                   className="text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors hover:opacity-90"
                   style={{ background: "#1e3a5f" }}
                 >
@@ -790,21 +811,65 @@ function SheltersPage() {
 }
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
-function VictimProfile({ emergencyContacts }: { emergencyContacts: string[] }) {
+function ListEditor({ title, items, placeholder, onChange, max = 8, emptyText }: {
+  title: string; items: string[]; placeholder: string; onChange: (next: string[]) => void; max?: number; emptyText: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (items.length >= max) { toast.error(`You can add up to ${max} entries.`); return; }
+    onChange([...items, v]);
+    setDraft("");
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">{title}</h3>
+      <div className="space-y-2 mb-3">
+        {items.length === 0 && <p className="text-xs text-gray-500">{emptyText}</p>}
+        {items.map((item, i) => (
+          <div key={`${item}-${i}`} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
+            <span className="text-xs text-[#0f1b2d]">{item}</span>
+            <button onClick={() => onChange(items.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700 text-[11px] font-semibold">Remove</button>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }} placeholder={placeholder}
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#1e3a5f]" />
+        <button onClick={add} className="px-3 py-2 rounded-xl bg-[#1e3a5f] text-white text-xs font-semibold hover:opacity-90">Add</button>
+      </div>
+    </div>
+  );
+}
+
+function VictimProfile() {
+  const session = useSession();
+  const profile = session.profile!;
   const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: profile.name, phone: profile.phone ?? "", location: profile.location, bloodGroup: profile.bloodGroup ?? "" });
+
+  const save = async () => {
+    if (!form.name.trim()) { toast.error("Name is required."); return; }
+    await session.updateProfile({ name: form.name.trim(), phone: form.phone.trim(), location: form.location.trim(), bloodGroup: form.bloodGroup });
+    setEditing(false);
+    toast.success("Profile updated.");
+  };
 
   return (
     <div className="max-w-xl mx-auto space-y-5">
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#1e3a5f] flex items-center justify-center text-white text-lg font-bold">MR</div>
+            <div className="w-14 h-14 rounded-full bg-[#1e3a5f] flex items-center justify-center text-white text-lg font-bold">{initialsOf(profile.name)}</div>
             <div>
-              <p className="text-base font-bold text-[#0f1b2d]">Mohammad Rafiqul Islam</p>
-              <p className="text-xs text-gray-500">Victim · Sylhet Sadar</p>
-              <span className="inline-flex items-center gap-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded-full mt-1">
-                <CheckCircle className="w-3 h-3" /> Verified
-              </span>
+              <p className="text-base font-bold text-[#0f1b2d]">{profile.name}</p>
+              <p className="text-xs text-gray-500">Victim{profile.location ? ` · ${profile.location}` : ""}</p>
+              {session.emailVerified ? (
+                <span className="inline-flex items-center gap-1 text-[10px] text-green-700 bg-green-100 px-2 py-0.5 rounded-full mt-1"><CheckCircle className="w-3 h-3" /> Email verified</span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full mt-1"><Clock className="w-3 h-3" /> Email not verified</span>
+              )}
             </div>
           </div>
           <button onClick={() => setEditing(v => !v)} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
@@ -812,98 +877,63 @@ function VictimProfile({ emergencyContacts }: { emergencyContacts: string[] }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          {[
-            { label: "Full Name", value: "Mohammad Rafiqul Islam" },
-            { label: "Phone", value: "+880 1712345678" },
-            { label: "Email", value: "rafiq@email.com" },
-            { label: "District", value: "Sylhet" },
-            { label: "NID Number", value: "••••••••••••" },
-            { label: "Blood Group", value: "O+" },
-          ].map(f => (
-            <div key={f.label}>
-              <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">{f.label}</p>
-              <p className="text-sm font-medium text-[#0f1b2d]">{f.value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Family members */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-[#0f1b2d]">Family Members</h3>
-          <button onClick={() => toast.info("Add family member feature")} className="text-[#0d9488] hover:text-teal-700">
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="space-y-2">
-          {["Amena Begum (Wife, 45)", "Riya Islam (Daughter, 12)", "Rafiq Sr. (Father, 72)"].map(m => (
-            <div key={m} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
-              <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500">{m[0]}</div>
-              <span className="text-xs text-[#0f1b2d]">{m}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Medical conditions */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Medical Conditions</h3>
-        <div className="flex flex-wrap gap-2">
-          {["No known conditions"].map(c => (
-            <span key={c} className="text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded-full border border-green-200">{c}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Emergency contacts */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-bold text-[#0f1b2d] mb-3">Emergency Contacts</h3>
-        <div className="space-y-2">
-          {emergencyContacts.length === 0 ? (
-            <p className="text-xs text-gray-500">No emergency contacts added yet.</p>
-          ) : (
-            emergencyContacts.map((phone, index) => (
-              <div key={`${phone}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                <div>
-                  <p className="text-xs font-semibold text-[#0f1b2d]">Contact {index + 1}</p>
-                  <p className="text-[10px] text-gray-500">{phone}</p>
-                </div>
-                <button onClick={() => toast.success(`Calling ${phone}…`)} className="p-2 bg-[#0d9488] text-white rounded-lg hover:opacity-90">
-                  <Phone className="w-3 h-3" />
-                </button>
+        {editing ? (
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {([["name", "Full Name"], ["phone", "Phone"], ["location", "District / Area"], ["bloodGroup", "Blood Group"]] as const).map(([k, label]) => (
+              <div key={k}>
+                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-1">{label}</p>
+                <input value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1e3a5f]" />
               </div>
-            ))
-          )}
-        </div>
+            ))}
+            <div className="col-span-2 flex gap-2 mt-1">
+              <button onClick={save} className="px-4 py-2 rounded-xl bg-[#1e3a5f] text-white text-xs font-semibold">Save changes</button>
+              <button onClick={() => setEditing(false)} className="px-4 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-semibold">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            {[
+              { label: "Full Name", value: profile.name },
+              { label: "Phone", value: profile.phone || "Not added" },
+              { label: "Email", value: profile.email },
+              { label: "District / Area", value: profile.location || "Not added" },
+              { label: "Blood Group", value: profile.bloodGroup || "Not added" },
+              { label: "Member since", value: profile.joinedAt },
+            ].map(f => (
+              <div key={f.label}>
+                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">{f.label}</p>
+                <p className="text-sm font-medium text-[#0f1b2d] break-words">{f.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <ListEditor title="Family Members" items={profile.familyMembers ?? []} placeholder="e.g. Amena Begum (Wife, 45)" emptyText="No family members added yet." onChange={v => session.updateProfile({ familyMembers: v })} />
+      <ListEditor title="Medical Conditions" items={profile.medicalConditions ?? []} placeholder="e.g. Diabetes" emptyText="No conditions listed." onChange={v => session.updateProfile({ medicalConditions: v })} />
+      <ListEditor title="Emergency Contacts" items={profile.emergencyContacts ?? []} placeholder="+880 1XXXXXXXXX" max={5} emptyText="No emergency contacts added yet." onChange={v => session.updateProfile({ emergencyContacts: v })} />
     </div>
   );
 }
 
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) => void }) {
+  useDbRevision();
+  const session = useSession();
+  const uid = session.profile!.id;
   const [activePage, setActivePage] = useState<VictimPage>("dashboard");
   const [notifs, setNotifs] = usePersistedState("notifications");
-  const [emergencyContacts, setEmergencyContacts] = useState<string[]>([
-    "+880 1812345678",
-    "+880 1912345678",
-  ]);
   const [rescuePolls, setRescuePolls] = usePersistedState("rescuePolls");
-  const [userHearts, setUserHearts] = useState<Record<string, boolean>>({});
+  const userHearts: Record<string, boolean> = Object.fromEntries(rescuePolls.map(p => [p.id, !!p.heartedBy?.includes(uid)]));
 
   const handleToggleHeart = (pollId: string) => {
     const hasHearted = userHearts[pollId];
-
     setRescuePolls(prev => prev.map(poll => {
       if (poll.id !== pollId) return poll;
-      const newHearts = hasHearted ? Math.max(0, poll.hearts - 1) : poll.hearts + 1;
-      return { ...poll, hearts: newHearts };
-    }).sort((a, b) => b.hearts - a.hearts));
-
-    setUserHearts(prev => ({ ...prev, [pollId]: !hasHearted }));
-    toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert ❤️");
+      const heartedBy = hasHearted ? (poll.heartedBy ?? []).filter(id => id !== uid) : [...(poll.heartedBy ?? []), uid];
+      return { ...poll, heartedBy, hearts: heartedBy.length };
+    }));
+    toast.success(hasHearted ? "Removed heart support." : "Added heart support for rescue alert");
   };
 
   return (
@@ -911,19 +941,19 @@ export default function VictimPortal({ onNavigate }: { onNavigate: (v: string) =
       navItems={NAV_ITEMS}
       activePage={activePage}
       onNavigate={p => setActivePage(p as VictimPage)}
-      userName="Mohammad Rafiqul Islam"
+      userName={session.name}
       userRole="Victim"
-      userInitials="MR"
+      userInitials={initialsOf(session.name)}
       portalLabel="Victim Portal"
       onLogout={() => onNavigate("landing")}
       notifications={notifs}
       onMarkRead={id => setNotifs(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))}
     >
       {activePage === "dashboard"       && <VictimDashboard onNavigate={setActivePage} rescuePolls={rescuePolls} onToggleHeart={handleToggleHeart} userHearts={userHearts} />}
-      {activePage === "request-help"    && <RequestHelp onBroadcastRescue={(poll) => setRescuePolls(prev => [poll, ...prev].sort((a, b) => b.hearts - a.hearts))} />}
+      {activePage === "request-help"    && <RequestHelp onBroadcastRescue={(poll) => setRescuePolls(prev => [poll, ...prev])} />}
       {activePage === "track-requests"  && <TrackRequests />}
       {activePage === "shelters"        && <SheltersPage />}
-      {activePage === "profile"         && <VictimProfile emergencyContacts={emergencyContacts} />}
+      {activePage === "profile"         && <VictimProfile />}
     </PortalLayout>
   );
 }

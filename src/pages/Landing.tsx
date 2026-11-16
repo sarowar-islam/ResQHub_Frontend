@@ -8,6 +8,8 @@ import {
 
 import MapView from "../components/MapView";
 import type { UserRole } from "./Auth";
+import { mapMarkers } from "../lib/derive";
+import { EMERGENCY_CONTACTS } from "../data/emergencyContacts";
 import { db, usePersistedState } from "../context/DataContext";
 
 type AppView = string;
@@ -41,11 +43,12 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
   const [activePage, setActivePage] = useState<LandingPage>("Home");
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
 
-  const activeAlert = db.alerts[tickerIndex];
+  const activeAlert = db.alerts[tickerIndex % Math.max(db.alerts.length, 1)];
 
   useEffect(() => {
     if (isAlertExpanded) return;
 
+    if (db.alerts.length < 2) return;
     const t = setInterval(() => setTickerIndex(i => (i + 1) % db.alerts.length), 4000);
     return () => clearInterval(t);
   }, [isAlertExpanded]);
@@ -78,10 +81,10 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
               {[
-                { label: "People reached", value: "1.2M+" },
-                { label: "Volunteer response time", value: "12 mins" },
-                { label: "Operational districts", value: "64" },
-                { label: "Shelters coordinated", value: "234" }
+                { label: "People helped", value: formatNumber(db.stats.victimsHelped) },
+                { label: "Active requests", value: formatNumber(db.stats.activeRequests) },
+                { label: "Registered volunteers", value: formatNumber(db.stats.registeredVolunteers) },
+                { label: "Shelters coordinated", value: formatNumber(db.stats.activeShelters) }
               ].map(item => (
                 <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 text-center shadow-sm">
                   <p className="text-3xl font-extrabold text-[#0f1b2d] mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{item.value}</p>
@@ -138,7 +141,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
 
           <section className="max-w-7xl mx-auto px-4 py-16">
             <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {db.emergencyContacts.map(contact => (
+              {EMERGENCY_CONTACTS.map(contact => (
                 <div key={contact.name} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -201,6 +204,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
   return (
     <div className="min-h-screen" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       {/* Emergency Alert Bar */}
+      {activeAlert && (
       <div className="bg-red-600 text-white py-2 px-4 overflow-hidden">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full flex-shrink-0">
@@ -217,8 +221,9 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </button>
         </div>
       </div>
+      )}
 
-      {isAlertExpanded && (
+      {activeAlert && isAlertExpanded && (
         <div className="bg-[#fef2f2] border-b border-red-200 px-4 py-4">
           <div className="max-w-7xl mx-auto grid lg:grid-cols-[1.3fr_0.7fr] gap-5">
             <div className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
@@ -411,7 +416,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                   <Map className="w-3.5 h-3.5 text-teal-400" />
                   <span className="text-xs font-medium text-gray-300">Real-time Operations Map — Bangladesh</span>
                 </div>
-                <MapView markers={db.mapMarkers} height="h-72" />
+                <MapView markers={mapMarkers()} height="h-72" />
               </div>
             </div>
           </div>
@@ -444,7 +449,8 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
       </section>
 
       {/* Current Alerts */}
-      <section className="py-10" style={{ background: "#f0f4f8" }}>
+      {db.alerts.length > 0 && activeAlert && (
+<section className="py-10" style={{ background: "#f0f4f8" }}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-4">
             <Bell className="w-4 h-4 text-red-500" />
@@ -523,6 +529,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* How It Works */}
       <section className="py-16 bg-white">
@@ -591,7 +598,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
             {[
               { icon: Activity, title: "Real-time Tracking", desc: "Every request, volunteer, and delivery tracked live. No black boxes.", color: "#1e3a5f" },
               { icon: Zap, title: "Smart Matching", desc: "AI matches victims with the nearest available volunteers based on skills and location.", color: "#0d9488" },
-              { icon: MapPin, title: "Shelter Network", desc: "234 shelters across Bangladesh with live capacity, facilities, and distance data.", color: "#f97316" },
+              { icon: MapPin, title: "Shelter Network", desc: `${db.stats.activeShelters} shelters across Bangladesh with live capacity, facilities, and distance data.`, color: "#f97316" },
               { icon: Bot, title: "AI Emergency Assistant", desc: "Summarize reports, prioritize requests, and generate insights — all AI-powered.", color: "#7c3aed" },
               { icon: Package, title: "Inventory Management", desc: "Track food, water, medicine, and supplies across all warehouses in real time.", color: "#16a34a" },
               { icon: Globe, title: "Multi-district Coverage", desc: "Deployed across all 64 districts with offline-ready capabilities for remote areas.", color: "#dc2626" },
@@ -634,13 +641,14 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
                 ))}
               </div>
             </div>
-            <MapView markers={db.mapMarkers} height="h-96" />
+            <MapView markers={mapMarkers()} height="h-96" />
           </div>
         </div>
       </section>
 
       {/* Testimonials */}
-      <section className="py-16" style={{ background: "#f0f4f8" }}>
+      {db.testimonials.length > 0 && (
+<section className="py-16" style={{ background: "#f0f4f8" }}>
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-10">
             <p className="text-xs font-bold uppercase tracking-widest text-[#0d9488] mb-3">Testimonials</p>
@@ -669,9 +677,11 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* Latest News */}
-      <section className="py-16 bg-white">
+      {db.news.length > 0 && (
+<section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -701,6 +711,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* Emergency Contacts */}
       <section className="py-10" style={{ background: "#1e3a5f" }}>
@@ -711,7 +722,7 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
             <span className="text-xs text-blue-300 bg-white/8 px-2 py-0.5 rounded-full">Bangladesh Government & Relief Services</span>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {db.emergencyContacts.map(c => (
+            {EMERGENCY_CONTACTS.map(c => (
               <div key={c.name} className="flex items-center gap-3 bg-white/8 rounded-xl px-4 py-3 hover:bg-white/12 transition-colors cursor-pointer">
                 <Phone className="w-4 h-4 text-teal-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -726,11 +737,12 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
       </section>
 
       {/* Partners */}
-      <section className="py-10 bg-white border-t border-gray-100">
+      {db.ngos.some(n => n.verified) && (
+<section className="py-10 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4">
           <p className="text-center text-xs font-bold uppercase tracking-widest text-gray-400 mb-6">Trusted Partner Organizations</p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            {db.partnerNames.map(name => (
+            {db.ngos.filter(n => n.verified).map(n => n.name).map(name => (
               <div key={name} className="px-5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm font-semibold text-gray-500 hover:border-gray-200 hover:text-gray-700 transition-colors cursor-pointer">
                 {name}
               </div>
@@ -738,12 +750,13 @@ export default function Landing({ onNavigate }: { onNavigate: (v: string, role?:
           </div>
         </div>
       </section>
+)}
 
       {/* CTA Banner */}
       <section className="py-14" style={{ background: "#0d9488" }}>
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-extrabold text-white mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Be the difference in someone's survival.</h2>
-          <p className="text-teal-100 mb-7 text-sm">Join 12,000+ volunteers and 89 NGOs already using ResQHub to coordinate fast, dependable response.</p>
+          <p className="text-teal-100 mb-7 text-sm">Join the volunteers and NGOs already using ResQHub to coordinate fast, dependable response.</p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button onClick={() => onNavigate("victim")} className="px-7 py-3.5 bg-white text-[#0d9488] font-bold rounded-xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
               <LifeBuoy className="w-4 h-4" /> I Need Help

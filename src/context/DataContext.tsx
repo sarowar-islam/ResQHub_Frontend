@@ -1,98 +1,134 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode, Dispatch, SetStateAction } from "react";
-import { SEED_COLLECTIONS } from "../data/mockData";
-import { fetchCollections, saveCollection, seedCollections } from "../lib/api";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, Dispatch, SetStateAction } from "react";
+import { toast } from "sonner";
+import type {
+  Alert, Announcement, Campaign, HelpRequest, InventoryItem, NGO, NewsItem, Notification,
+  RescuePoll, Shelter, Stats, Testimonial, AppUser, Volunteer,
+} from "../types";
+import { saveRecords } from "../lib/api";
 
-export type Collections = typeof SEED_COLLECTIONS;
+export interface Collections {
+  alerts: Alert[];
+  announcements: Announcement[];
+  campaigns: Campaign[];
+  helpRequests: HelpRequest[];
+  inventory: InventoryItem[];
+  news: NewsItem[];
+  ngos: NGO[];
+  notifications: Notification[];
+  rescuePolls: RescuePoll[];
+  shelters: Shelter[];
+  testimonials: Testimonial[];
+  users: AppUser[];
+  volunteers: Volunteer[];
+}
 export type CollectionName = keyof Collections;
 
-/**
- * Live copy of the Supabase data. It is filled before any page renders
- * (DataProvider gates the app), so pages can read `db.helpRequests` etc. directly.
- */
-export const db = {} as Collections;
+const EMPTY_STATS: Stats = {
+  victimsHelped: 0, registeredVolunteers: 0, partnerNGOs: 0, activeShelters: 0,
+  activeRequests: 0, completedRequests: 0, criticalRequests: 0,
+};
 
-const DataContext = createContext<{ reload: () => Promise<void> } | null>(null);
+/** Live copy of what the signed-in user may see, loaded from Supabase before any page renders. */
+export const db: Collections & { stats: Stats } = {
+  alerts: [], announcements: [], campaigns: [], helpRequests: [], inventory: [], news: [], ngos: [],
+  notifications: [], rescuePolls: [], shelters: [], testimonials: [], users: [], volunteers: [],
+  stats: EMPTY_STATS,
+};
 
-export function DataProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [error, setError] = useState("");
+const listeners = new Set<() => void>();
+export const subscribeDb = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
-  const load = useCallback(async () => {
-    setStatus("loading");
-    try {
-      let res = await fetchCollections();
-      if (!res.seeded) {
-        // First run (or a missing collection): upload starter data, never overwriting existing rows.
-        await seedCollections(SEED_COLLECTIONS);
-        res = await fetchCollections();
-      }
-      Object.assign(db, res.data);
-      setStatus("ready");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStatus("error");
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  if (status !== "ready") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f4f7fb] px-6" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-        <div className="text-center max-w-sm">
-          {status === "loading" ? (
-            <>
-              <div className="w-10 h-10 mx-auto mb-4 rounded-full border-4 border-[#1e3a5f]/20 border-t-[#1e3a5f] animate-spin" />
-              <p className="text-sm font-semibold text-[#0f1b2d]">Loading ResQHub…</p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-bold text-[#0f1b2d] mb-1">Could not reach the ResQHub backend</p>
-              <p className="text-xs text-gray-500 mb-4 break-words">{error}</p>
-              <button onClick={load} className="px-4 py-2 rounded-xl bg-[#1e3a5f] text-white text-sm font-semibold">Retry</button>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return <DataContext.Provider value={{ reload: load }}>{children}</DataContext.Provider>;
+export function applySnapshot(data: Record<string, any[]>, stats: Stats) {
+  (Object.keys(db) as (keyof typeof db)[]).forEach(k => { if (k !== "stats") (db as any)[k] = data[k] ?? []; });
+  db.stats = stats ?? EMPTY_STATS;
+  listeners.forEach(fn => fn());
+  bump();
 }
 
-export function useData() {
-  const ctx = useContext(DataContext);
-  if (!ctx) throw new Error("useData must be used within DataProvider");
-  return ctx;
+// Re-renders any component using useDbRevision() when records change anywhere in the app.
+let revision = 0;
+const revListeners = new Set<() => void>();
+const bump = () => { revision++; revListeners.forEach(fn => fn()); };
+export const useDbRevision = () =>
+  useSyncExternalStore(fn => { revListeners.add(fn); return () => { revListeners.delete(fn); }; }, () => revision);
+
+const pending = new Set<string>();
+
+function persist(name: CollectionName, items: unknown[], deleted: string[]) {
+  const key = `${name}:${Math.random()}`;
+  pending.add(key);
+  return saveRecords(name, items, deleted)
+    .then(res => {
+      if (res.denied > 0) toast.error("Some changes were not permitted for your account.");
+    })
+    .catch(err => toast.error(`Could not save ${name}: ${err.message}`))
+    .finally(() => pending.delete(key));
+}
+
+/** Create or replace a single record and save it. */
+export function upsertRecord<K extends CollectionName>(name: K, record: Collections[K][number]) {
+  const list = db[name] as unknown as { id: string }[];
+  const idx = list.findIndex(r => r.id === (record as any).id);
+  (db as any)[name] = idx >= 0 ? list.map((r, i) => (i === idx ? record : r)) : [record, ...list];
+  bump();
+  return persist(name, [record], []);
+}
+
+/** Merge changes into one existing record and save it. */
+export function patchRecord<K extends CollectionName>(name: K, id: string, patch: Partial<Collections[K][number]>) {
+  const list = db[name] as unknown as { id: string }[];
+  const current = list.find(r => r.id === id);
+  if (!current) return Promise.resolve();
+  return upsertRecord(name, { ...current, ...patch } as any);
+}
+
+/** Delete one record. */
+export function removeRecord(name: CollectionName, id: string) {
+  (db as any)[name] = (db[name] as unknown as { id: string }[]).filter(r => r.id !== id);
+  bump();
+  return persist(name, [], [id]);
 }
 
 /** Prepend one item to a collection and save it. */
-export function addToCollection<K extends CollectionName>(name: K, item: Collections[K] extends (infer T)[] ? T : never) {
-  const next = [item, ...(db[name] as unknown as unknown[])] as unknown as Collections[K];
-  db[name] = next;
-  return saveCollection(name, next);
-}
+export const addToCollection = upsertRecord;
 
-/** Drop-in replacement for useState(MOCK_DATA): same API, but every change is saved to Supabase. */
+const snapshotOf = (list: { id: string }[]) => new Map(list.map(r => [r.id, JSON.stringify(r)]));
+
+/**
+ * Like useState for a whole collection, but every change is diffed against the last saved copy
+ * and only the changed/removed records are sent to Supabase. Background refreshes update it too.
+ */
 export function usePersistedState<K extends CollectionName>(
   name: K,
-  initial: Collections[K] = db[name],
 ): [Collections[K], Dispatch<SetStateAction<Collections[K]>>] {
-  const [value, setValue] = useState<Collections[K]>(initial);
-  const [dirty, setDirty] = useState(false);
+  const [value, setValue] = useState<Collections[K]>(db[name]);
+  const [dirty, setDirty] = useState(0);
+  const synced = useRef(snapshotOf(db[name] as any));
 
   const set: Dispatch<SetStateAction<Collections[K]>> = useCallback((next) => {
-    setDirty(true);
+    setDirty(d => d + 1);
     setValue(next);
   }, []);
 
   useEffect(() => {
     if (!dirty) return;
-    // Only persist when the state is the full collection (not a filtered view).
-    if (initial !== db[name]) return;
-    db[name] = value;
-    saveCollection(name, value).catch(err => console.error(`Failed to save ${name}`, err));
-  }, [value, dirty, name, initial]);
+    const list = value as unknown as { id: string }[];
+    const changed = list.filter(r => synced.current.get(r.id) !== JSON.stringify(r));
+    const ids = new Set(list.map(r => r.id));
+    const deleted = [...synced.current.keys()].filter(id => !ids.has(id));
+    if (!changed.length && !deleted.length) return;
+    synced.current = snapshotOf(list);
+    (db as any)[name] = value;
+    bump();
+    persist(name, changed, deleted);
+  }, [value, dirty, name]);
+
+  // Pick up background refreshes unless local edits are still being saved.
+  useEffect(() => subscribeDb(() => {
+    if (pending.size) return;
+    synced.current = snapshotOf(db[name] as any);
+    setValue(db[name]);
+  }), [name]);
 
   return [value, set];
 }

@@ -37,9 +37,44 @@ function formatContent(text: string) {
       );
     }
     if (line.trim() === "") return <div key={i} className="h-1" />;
-    const boldReplaced = line.replace(/\*\*(.+?)\*\*/g, (_, p1) => `<strong>${p1}</strong>`);
+    const escaped = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const boldReplaced = escaped.replace(/\*\*(.+?)\*\*/g, (_, p1) => `<strong>${p1}</strong>`);
     return <p key={i} className="text-xs leading-relaxed mb-0.5" dangerouslySetInnerHTML={{ __html: boldReplaced }} />;
   });
+}
+
+// Answers are built from the live records the signed-in user can see (no canned text).
+function answer(text: string): string {
+  const lower = text.toLowerCase();
+  const reqs = db.helpRequests;
+  const open = reqs.filter(r => ["pending", "accepted", "assigned"].includes(r.status));
+  const byType = (list: typeof reqs) => {
+    const c: Record<string, number> = {};
+    list.forEach(r => { c[r.type] = (c[r.type] ?? 0) + 1; });
+    return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${v}`).join(", ") || "none";
+  };
+
+  if (lower.includes("summar")) {
+    if (!reqs.length) return "There are no help requests visible to you yet.";
+    const done = reqs.filter(r => r.status === "completed").length;
+    return `Right now there are ${reqs.length} requests: ${open.length} open (${db.stats.criticalRequests} critical) and ${done} completed. Open requests by type - ${byType(open)}. ${db.volunteers.filter(v => v.isAvailable).length} volunteers are marked available.`;
+  }
+  if (lower.includes("prior")) {
+    const rank = { critical: 0, high: 1, medium: 2, low: 3 } as Record<string, number>;
+    const top = open.filter(r => r.status !== "assigned").sort((a, b) => rank[a.priority] - rank[b.priority] || a.createdAt.localeCompare(b.createdAt)).slice(0, 5);
+    if (!top.length) return "No unassigned open requests need prioritising right now.";
+    return "Suggested order of response:\n" + top.map((r, i) => `${i + 1}. ${r.priority.toUpperCase()} - ${r.type} for ${r.victimName} at ${r.location.label}`).join("\n");
+  }
+  if (lower.includes("shelter")) {
+    const shelters = db.shelters.filter(s => s.status !== "closed").sort((a, b) => (b.capacity - b.currentOccupancy) - (a.capacity - a.currentOccupancy));
+    if (!shelters.length) return "No open shelters are registered yet.";
+    return "Shelters with the most free space:\n" + shelters.slice(0, 5).map(s => `- ${s.name} (${s.location.label}): ${s.capacity - s.currentOccupancy} places free of ${s.capacity}`).join("\n");
+  }
+  if (lower.includes("relief") || lower.includes("generat") || lower.includes("report")) {
+    const done = reqs.filter(r => r.status === "completed");
+    return `Relief report - ${new Date().toLocaleDateString()}\nTotal requests: ${reqs.length}\nCompleted: ${done.length}\nOpen: ${open.length}\nRequests by type: ${byType(reqs)}\nVolunteers registered: ${db.volunteers.length}\nOpen shelters: ${db.shelters.filter(s => s.status !== "closed").length}`;
+  }
+  return "I can summarise current requests, suggest which to prioritise, list shelters with free space, or generate a relief report. Try asking for one of those.";
 }
 
 export default function AIChat({ isOpen, onClose }: AIChatProps) {
@@ -67,17 +102,12 @@ export default function AIChat({ isOpen, onClose }: AIChatProps) {
     setLoading(true);
 
     setTimeout(() => {
-      const lower = text.toLowerCase();
-      let response = "I've received your query. Based on current field data, I recommend coordinating with the nearest volunteer team. Response time is averaging 2.4 hours. Shall I escalate this request to NGO coordinators?";
-      if (lower.includes("summar")) response = db.aiResponses["summarize"];
-      else if (lower.includes("prior")) response = db.aiResponses["prioritize"];
-      else if (lower.includes("shelter")) response = db.aiResponses["shelter"];
-      else if (lower.includes("relief") || lower.includes("generat")) response = db.aiResponses["generate"];
+      const response = answer(text);
 
       const aiMsg: Message = { id: (Date.now() + 1).toString(), role: "assistant", content: response, timestamp: new Date() };
       setMessages(prev => [...prev, aiMsg]);
       setLoading(false);
-    }, 1400);
+    }, 500);
   };
 
   if (!isOpen) return null;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair, Loader2, MapPin, Search } from "lucide-react";
-import type { MapMarker } from "../data/mockData";
+import type { MapMarker } from "../types";
 import { useUserLocation } from "../context/LocationContext";
 import { searchPlace } from "../lib/geocode";
 

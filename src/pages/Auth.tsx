@@ -5,16 +5,12 @@ import {
   BriefcaseBusiness
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSession, type UserRole } from "../context/SessionContext";
+import { useUserLocation } from "../context/LocationContext";
+import { db } from "../context/DataContext";
 
-type AuthMode = "login" | "signup" | "forgot" | "otp";
-export type UserRole = "victim" | "volunteer" | "ngo" | "admin";
-
-const DEMO_ACCOUNTS: Record<UserRole, { label: string; email: string; password: string; hint: string }> = {
-  victim: { label: "Victim Portal", email: "victim@resqhub.demo", password: "Victim@123", hint: "Role: Needs help" },
-  volunteer: { label: "Volunteer Portal", email: "volunteer@resqhub.demo", password: "Volunteer@123", hint: "Role: Community volunteer" },
-  ngo: { label: "NGO Portal", email: "ngo@resqhub.demo", password: "Ngo@123456", hint: "Role: Relief organization" },
-  admin: { label: "Admin Portal", email: "admin@resqhub.demo", password: "Admin@123456", hint: "Role: System admin" },
-};
+type AuthMode = "login" | "signup" | "forgot" | "confirm" | "reset";
+export type { UserRole };
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -58,11 +54,12 @@ interface AuthProps {
 }
 
 export default function Auth({ initialMode = "login", defaultRole = "victim", onNavigate }: AuthProps) {
-  const [mode, setMode] = useState<AuthMode>(initialMode);
+  const session = useSession();
+  const userLocation = useUserLocation();
+  const [mode, setMode] = useState<AuthMode>(session.recovering ? "reset" : initialMode);
   const [role, setRole] = useState<UserRole>(defaultRole);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [otpValues, setOtpValues] = useState(["", "", "", "", "", ""]);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
   // Form fields
@@ -71,26 +68,23 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [remember, setRemember] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    setRole(defaultRole);
-  }, [defaultRole]);
-
-  useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
+  useEffect(() => { setRole(defaultRole); }, [defaultRole]);
+  useEffect(() => { setMode(initialMode); }, [initialMode]);
+  useEffect(() => { if (session.recovering) setMode("reset"); }, [session.recovering]);
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!email) e.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Invalid email address";
+    if (mode !== "reset") {
+      if (!email) e.email = "Email is required";
+      else if (!/\S+@\S+\.\S+/.test(email)) e.email = "Invalid email address";
+    }
     if (!password) e.password = "Password is required";
     else if (password.length < 8) e.password = "Minimum 8 characters";
-    if (mode === "signup") {
-      if (!name.trim()) e.name = "Full name is required";
-      if (phone && !/^\+?[\d\s-]{7,15}$/.test(phone.trim())) e.phone = "Enter a valid phone number";
+    if (mode === "signup" || mode === "reset") {
+      if (mode === "signup" && !name.trim()) e.name = "Full name is required";
+      if (mode === "signup" && phone && !/^\+?[\d\s-]{7,15}$/.test(phone.trim())) e.phone = "Enter a valid phone number";
       if (!confirmPassword) e.confirmPassword = "Please confirm your password";
       else if (password !== confirmPassword) e.confirmPassword = "Passwords do not match";
     }
@@ -98,56 +92,58 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-
-    if (mode === "login") {
-      const demoAccount = DEMO_ACCOUNTS[role];
-      if (email.toLowerCase() !== demoAccount.email || password !== demoAccount.password) {
-        setErrors({
-          email: "Use the demo credentials shown below.",
-          password: "Use the demo credentials shown below.",
+    setLoading(true);
+    try {
+      if (mode === "login") {
+        await session.signIn(email.trim(), password);
+        toast.success("Welcome back! Loading your dashboard…");
+      } else if (mode === "signup") {
+        const { needsConfirmation } = await session.signUp({
+          email: email.trim(), password, name: name.trim(), phone: phone.trim(), role,
+          lat: userLocation.location?.lat, lng: userLocation.location?.lng, locationLabel: userLocation.location?.label,
         });
-        toast.error(`Invalid login for ${demoAccount.label}. Use the demo credentials below.`);
-        return;
+        if (needsConfirmation) setMode("confirm");
+        else toast.success("Account created! Loading your dashboard…");
+      } else if (mode === "reset") {
+        await session.updatePassword(password);
+        toast.success("Password updated. You're signed in.");
+        setPassword(""); setConfirmPassword("");
       }
-      // Login success - go to portal, email is "verified" for demo
-      toast.success("Welcome back! Redirecting to your dashboard…");
-      setTimeout(() => onNavigate(role), 800);
-    } else if (mode === "signup") {
-      // For signup, always go to email OTP first (skippable)
-      setMode("otp");
-      toast.info("OTP sent to your email address.");
+    } catch (err: any) {
+      const msg = err.message || "Something went wrong";
+      if (mode === "login") setErrors({ password: msg });
+      else if (mode === "signup" && /exist|registered/i.test(msg)) setErrors({ email: msg });
+      toast.error(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleForgot = (e: React.FormEvent) => {
+  const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) { setErrors({ email: "Email required" }); return; }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await session.sendPasswordReset(email.trim());
       toast.success("Password reset link sent to your email.");
       setMode("login");
-    }, 1000);
-  };
-
-  const handleOtpSubmit = () => {
-    const code = otpValues.join("");
-    if (code.length < 6) { toast.error("Please enter all 6 digits."); return; }
-    setLoading(true);
-    setTimeout(() => {
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
       setLoading(false);
-      toast.success("Account verified! Welcome to ResQHub.");
-      onNavigate(role);
-    }, 1000);
+    }
   };
 
-  const skipOtp = () => {
-    // Skip email verification for now - can verify later in profile
-    toast.success("Account created! You can verify your email later in your profile.");
-    onNavigate(role);
+  const resend = async () => {
+    try {
+      await session.resendConfirmation(email.trim());
+      toast.success("Confirmation email sent again.");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   };
 
   const roleConfig = {
@@ -176,17 +172,17 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
             <span style={{ color: "#0d9488" }}>starts here.</span>
           </h1>
           <p className="text-blue-200 text-sm leading-relaxed max-w-xs">
-            Join 12,000+ volunteers and 89 NGOs already coordinating support through ResQHub.
+            Volunteers, NGOs and people in need coordinating support through ResQHub.
           </p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: "Victims Helped", value: "48,250+" },
-            { label: "Active Volunteers", value: "12,847" },
-            { label: "Response Time", value: "< 2.4h" },
-            { label: "Partner NGOs", value: "89" },
+            { label: "Victims Helped", value: db.stats.victimsHelped.toLocaleString() },
+            { label: "Registered Volunteers", value: db.stats.registeredVolunteers.toLocaleString() },
+            { label: "Active Requests", value: db.stats.activeRequests.toLocaleString() },
+            { label: "Partner NGOs", value: db.stats.partnerNGOs.toLocaleString() },
           ].map(s => (
             <div key={s.label} className="bg-white/8 rounded-xl p-4">
               <p className="text-xl font-bold text-white" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
@@ -204,55 +200,50 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
         </button>
 
         <div className="w-full max-w-md">
-          {/* OTP Screen */}
-          {mode === "otp" && (
+          {session.authNotice && mode !== "confirm" && (
+            <div className="mb-5 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {session.authNotice}
+            </div>
+          )}
+
+          {/* Confirm your email */}
+          {mode === "confirm" && (
             <div>
               <div className="w-12 h-12 rounded-2xl bg-teal-100 flex items-center justify-center mx-auto mb-4">
                 <Mail className="w-6 h-6 text-teal-600" />
               </div>
-              <h2 className="text-2xl font-extrabold text-[#0f1b2d] text-center mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Verify your email</h2>
-              <p className="text-sm text-gray-500 text-center mb-7">We sent a 6-digit code to <strong>{email}</strong></p>
-              <div className="flex gap-3 justify-center mb-6">
-                {otpValues.map((v, i) => (
-                  <input
-                    key={i}
-                    type="text"
-                    maxLength={1}
-                    value={v}
-                    onChange={e => {
-                      const newVal = [...otpValues];
-                      newVal[i] = e.target.value.replace(/\D/, "");
-                      setOtpValues(newVal);
-                      if (e.target.value && i < 5) {
-                        const next = document.getElementById(`otp-${i + 1}`);
-                        next?.focus();
-                      }
-                    }}
-                    id={`otp-${i}`}
-                    className="w-12 h-12 text-center text-lg font-bold border-2 border-gray-200 rounded-xl focus:border-[#1e3a5f] focus:outline-none transition-colors"
-                  />
-                ))}
-              </div>
-              <button
-                onClick={handleOtpSubmit}
-                disabled={loading}
-                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2 mb-3"
-                style={{ background: "#1e3a5f" }}
-              >
-                {loading ? <span className="animate-spin rounded-full border-2 border-white border-t-transparent w-4 h-4" /> : <Check className="w-4 h-4" />}
-                Verify & Continue
-              </button>
-              <button
-                onClick={skipOtp}
-                className="w-full py-2.5 rounded-xl text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                Skip for now
+              <h2 className="text-2xl font-extrabold text-[#0f1b2d] text-center mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Check your inbox</h2>
+              <p className="text-sm text-gray-500 text-center mb-7">We sent a confirmation link to <strong>{email}</strong>. Open it, then sign in.</p>
+              <button onClick={() => setMode("login")} className="w-full py-3 rounded-xl text-white font-semibold text-sm hover:opacity-90 flex items-center justify-center gap-2 mb-3" style={{ background: "#1e3a5f" }}>
+                <Check className="w-4 h-4" /> I've confirmed, sign in
               </button>
               <p className="text-xs text-center text-gray-400 mt-4">
                 Didn't receive it?{" "}
-                <button onClick={() => toast.info("New OTP sent to your email.")} className="text-[#0d9488] font-medium hover:underline">Resend OTP</button>
+                <button onClick={resend} className="text-[#0d9488] font-medium hover:underline">Resend email</button>
               </p>
             </div>
+          )}
+
+          {/* Set new password (after clicking the reset link) */}
+          {mode === "reset" && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <h2 className="text-2xl font-extrabold text-[#0f1b2d] mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Choose a new password</h2>
+              <p className="text-sm text-gray-500 mb-2">Enter a new password for your account.</p>
+              <div>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="New password"
+                  className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:border-[#1e3a5f] ${errors.password ? "border-red-400" : "border-gray-200"}`} />
+                {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
+                <PasswordStrength password={password} />
+              </div>
+              <div>
+                <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password"
+                  className={`w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:border-[#1e3a5f] ${errors.confirmPassword ? "border-red-400" : "border-gray-200"}`} />
+                {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
+              </div>
+              <button type="submit" disabled={loading} className="w-full py-3 rounded-xl text-white font-semibold text-sm hover:opacity-90 disabled:opacity-60" style={{ background: "#1e3a5f" }}>
+                {loading ? "Saving…" : "Update password"}
+              </button>
+            </form>
           )}
 
           {/* Forgot Password */}
@@ -291,9 +282,9 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                   : "Join ResQHub and start making a difference today."}
               </p>
 
-              {(mode === "login" || mode === "signup") && (
+              {mode === "signup" && (
                 <div className="mb-5">
-                  <label className="block text-xs font-semibold text-[#0f1b2d] mb-2">{mode === "login" ? "Continue as…" : "I am registering as a…"}</label>
+                  <label className="block text-xs font-semibold text-[#0f1b2d] mb-2">I am registering as a…</label>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {(Object.entries(roleConfig) as [UserRole, typeof roleConfig.victim][]).map(([r, cfg]) => {
                       const Icon = cfg.icon;
@@ -302,14 +293,7 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                         <button
                           key={r}
                           type="button"
-                          onClick={() => {
-                            setRole(r);
-                            const demoAccount = DEMO_ACCOUNTS[r];
-                            if (mode === "login") {
-                              setEmail(demoAccount.email);
-                              setPassword(demoAccount.password);
-                            }
-                          }}
+                          onClick={() => setRole(r)}
                           className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 text-center transition-all ${isActive ? "border-2" : "border-gray-200 hover:border-gray-300"}`}
                           style={isActive ? { borderColor: cfg.color, background: cfg.color + "10" } : {}}
                         >
@@ -323,53 +307,6 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                 </div>
               )}
 
-              {mode === "login" && (
-                <div className="mb-5 rounded-2xl border border-[#dffaf6] bg-[#f0fdfb] p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#0d9488] mb-2">Demo credentials</p>
-                  <div className="space-y-2 text-[11px] text-slate-600">
-                    {(Object.entries(DEMO_ACCOUNTS) as [UserRole, typeof DEMO_ACCOUNTS.victim][]).map(([key, item]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setRole(key);
-                          setEmail(item.email);
-                          setPassword(item.password);
-                        }}
-                        className="w-full text-left rounded-xl bg-white px-2.5 py-2 border border-[#d7f5ee] hover:border-[#0d9488] transition-colors"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-[#0f1b2d]">{item.label}</span>
-                          <span className="text-[10px] text-[#0d9488]">Use</span>
-                        </div>
-                        <div className="mt-1 text-[10px] text-slate-500">{item.email} / {item.password}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Social login (placeholder) */}
-              <div className="flex gap-3 mb-5">
-                {["Google", "Facebook"].map(provider => (
-                  <button
-                    key={provider}
-                    type="button"
-                    onClick={() => toast.info(`${provider} login coming soon.`)}
-                    className="flex-1 py-2.5 border border-gray-200 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[8px] font-bold">{provider[0]}</span>
-                    {provider}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3 mb-5">
-                <div className="flex-1 h-px bg-gray-200" />
-                <span className="text-xs text-gray-400">or with email</span>
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Name (signup) */}
                 {mode === "signup" && (
@@ -379,7 +316,7 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text" value={name} onChange={e => { setName(e.target.value); if (errors.name) setErrors(prev => ({ ...prev, name: "" })); }}
-                        placeholder="Mohammad Rafiqul Islam"
+                        placeholder="Your full name"
                         className={`w-full pl-10 pr-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f] transition-all ${errors.name ? "border-red-400" : "border-gray-200"}`}
                       />
                     </div>
@@ -465,19 +402,6 @@ export default function Auth({ initialMode = "login", defaultRole = "victim", on
                     </div>
                     {errors.confirmPassword && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.confirmPassword}</p>}
                   </div>
-                )}
-
-                {/* Remember me */}
-                {mode === "login" && (
-                  <label className="flex items-center gap-2.5 cursor-pointer">
-                    <div
-                      onClick={() => setRemember(v => !v)}
-                      className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${remember ? "border-[#1e3a5f] bg-[#1e3a5f]" : "border-gray-300"}`}
-                    >
-                      {remember && <Check className="w-2.5 h-2.5 text-white" />}
-                    </div>
-                    <span className="text-xs text-gray-600">Remember me for 30 days</span>
-                  </label>
                 )}
 
                 <button

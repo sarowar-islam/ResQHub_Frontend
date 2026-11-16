@@ -3,7 +3,7 @@ import {
   Menu, X, Bell, Search, ChevronDown, LogOut, Settings,
   Shield, MessageCircle, AlertTriangle, Info, CheckCircle
 } from "lucide-react";
-import { Notification } from "../data/mockData";
+import { Notification } from "../types";
 import AIChat from "./AIChat";
 import VerifyEmailBanner from "./VerifyEmailBanner";
 import { useSession } from "../context/SessionContext";
