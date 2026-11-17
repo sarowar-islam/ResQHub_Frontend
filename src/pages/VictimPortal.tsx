@@ -259,7 +259,6 @@ function VictimDashboard({
 function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePoll) => void }) {
   const session = useSession();
   const [type, setType] = useState("");
-  const [priority, setPriority] = useState("");
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -284,7 +283,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
       return;
     }
 
-    if (!type || !priority || !description) {
+    if (!type || !description) {
       toast.error("Please fill in all required fields.");
       return;
     }
@@ -328,7 +327,7 @@ function RequestHelp({ onBroadcastRescue }: { onBroadcastRescue: (poll: RescuePo
         victimName: session.name || "Anonymous",
         victimPhone: session.phone || contact,
         type: type as any,
-        priority: priority as any,
+        priority: "medium",
         status: "pending",
         description,
         location: { lat: requestPoint.lat, lng: requestPoint.lng, label: requestLabel, district: requestLabel.split(",").slice(-3, -2)[0]?.trim() ?? "" },
